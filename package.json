@@ -1,0 +1,35 @@
+{
+  "name": "thincms-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for ThinCMS — AI agent access to CMS content management",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "thincms-mcp": "./bin/thincms-mcp.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
