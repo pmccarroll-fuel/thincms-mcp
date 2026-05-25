@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 const targetingSchema = z.object({
   scope: z.enum(["site-wide", "specific"]).describe("'site-wide' shows on all pages; 'specific' shows only on matching paths/pages/posts"),
@@ -17,7 +17,7 @@ const triggerConfigSchema = z.object({
 });
 
 export function registerPopupTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_popups",
     "List all popups/CTAs for the site with their linked form names.",
     {},
@@ -27,7 +27,7 @@ export function registerPopupTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_popup",
     "Get a single popup by ID with full configuration.",
     {
@@ -39,7 +39,7 @@ export function registerPopupTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_popup",
     "Create a new popup/CTA. Each popup is linked to an existing form (by formId) which handles the actual data collection. The popup provides the presentation container, trigger logic, and targeting rules. Display types: 'overlay' (centered modal), 'sticky-top'/'sticky-bottom' (fixed bars), 'slide-in' (bottom-right card). On mobile, overlay auto-downgrades to sticky-bottom to avoid Google's interstitial penalty.",
     {
@@ -66,7 +66,7 @@ export function registerPopupTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_popup",
     "Update an existing popup. Only provided fields are changed.",
     {
@@ -95,7 +95,7 @@ export function registerPopupTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_popup",
     "Delete a popup by ID.",
     {

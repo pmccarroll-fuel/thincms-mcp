@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 const navItemSchema = z.object({
   label: z.string().describe("Display text for the link"),
@@ -10,7 +10,7 @@ const navItemSchema = z.object({
 });
 
 export function registerNavigationTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_navigation",
     "Get the site's header and footer navigation arrays. Each nav item has a label, type (page/route/external), and target.",
     {},
@@ -20,7 +20,7 @@ export function registerNavigationTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_navigation",
     "Update header and/or footer navigation. Each is a full replacement array (max 20 items). Item types: 'page' (target = page slug, must exist and be published), 'route' (target = CMS path like /blog or /search), 'external' (target = full URL).",
     {

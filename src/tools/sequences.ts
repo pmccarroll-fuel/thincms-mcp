@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerSequenceTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_sequences",
     "List email sequences (drip campaigns) with their steps.",
     {},
@@ -14,7 +14,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_sequence",
     "Create a new email sequence.",
     {
@@ -27,7 +27,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_sequence",
     "Get a sequence by ID, including its steps.",
     { id: z.string().describe("Sequence ID") },
@@ -37,7 +37,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_sequence",
     "Update a sequence's name or trigger form.",
     {
@@ -52,7 +52,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_sequence",
     "Delete a sequence and all its steps.",
     { id: z.string().describe("Sequence ID") },
@@ -62,7 +62,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_add_sequence_step",
     "Add a step to a sequence.",
     {
@@ -78,7 +78,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_sequence_step",
     "Update a sequence step.",
     {
@@ -95,7 +95,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_sequence_step",
     "Delete a step from a sequence.",
     {
@@ -108,7 +108,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_reorder_sequence_steps",
     "Reorder steps in a sequence.",
     {
@@ -121,7 +121,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_publish_sequence",
     "Publish a sequence as an automation in the email platform.",
     { id: z.string().describe("Sequence ID") },
@@ -131,7 +131,7 @@ export function registerSequenceTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_pause_sequence",
     "Pause a published sequence automation.",
     { id: z.string().describe("Sequence ID") },

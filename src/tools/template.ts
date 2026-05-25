@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, formatText, siteAwareTool } from "../helpers.js";
 
 function stats(str: string) {
   const bytes = Buffer.byteLength(str, "utf-8");
@@ -13,7 +13,7 @@ function stats(str: string) {
 }
 
 export function registerTemplateTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_template",
     "Get the site's template: stylesheet (CSS), pageFrame (HTML wrapper with template tags like {{content}}, {{nav:header}}), and customHeadHtml.",
     {},
@@ -23,7 +23,7 @@ export function registerTemplateTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_template",
     "Update the site's template. Only provided fields are changed. The pageFrame must contain {{content}} if provided. For large files (>10KB), use the File variants instead of inlining content. Available template tags: {{content}}, {{nav:header}}, {{nav:footer}}, {{site:name}}, {{site:tagline}}, {{site:logo}}, {{year}}, {{search:form}}.",
     {
@@ -51,11 +51,23 @@ export function registerTemplateTools(server: McpServer, client: ThinCMSClient) 
         }
       }
       const result = await client.put("/template", body);
-      return formatResult(result);
+      if (!result.ok) return formatResult(result);
+      // Server echoes the full template back (potentially many KB). Return a
+      // summary instead — agents that need the full content can call
+      // thincms_get_template or thincms_template_status separately.
+      const data = result.data as Record<string, string>;
+      const summary = {
+        success: true,
+        fieldsUpdated: Object.keys(body),
+        stylesheet: stats(data.stylesheet || ""),
+        pageFrame: stats(data.pageFrame || ""),
+        customHeadHtml: stats(data.customHeadHtml || ""),
+      };
+      return formatText(JSON.stringify(summary, null, 2));
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_template_status",
     "Get the current template's stats (hash, byte size, line count) for each field. Optionally compare against local files to verify a push landed correctly. Returns match/mismatch with size and line differences.",
     {
@@ -111,12 +123,13 @@ export function registerTemplateTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_append_css",
     "Append CSS to the end of the site's existing stylesheet without replacing it. Useful for adding new rules without re-sending the entire stylesheet.",
     {
       css: z.string().optional().describe("CSS to append"),
       cssFile: z.string().optional().describe("Local file path containing CSS to append. Use instead of css for large additions."),
+      dryRun: z.boolean().optional().describe("When true, return the size delta the change would produce without writing. Use to sanity-check large appends before committing."),
     },
     async (params) => {
       let css = params.css;
@@ -130,18 +143,19 @@ export function registerTemplateTools(server: McpServer, client: ThinCMSClient) 
       if (!css) {
         return formatResult({ ok: false, status: 0, data: { error: "Provide css or cssFile" } });
       }
-      const result = await client.patch("/template", { mode: "append", css });
+      const result = await client.patch("/template", { mode: "append", css, ...(params.dryRun ? { dryRun: true } : {}) });
       return formatResult(result);
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_patch_css",
-    "Replace a named section of the stylesheet between comment markers. The stylesheet must contain /* START:<section> */ and /* END:<section> */ markers. Only the content between these markers is replaced.",
+    "Replace a named section of the stylesheet between comment markers. The stylesheet must contain /* START:<section> */ and /* END:<section> */ markers. Only the content between these markers is replaced.\n\nIMPORTANT — what to send: pass ONLY the body to insert between the markers, not a full stylesheet. If your input contains its own START:<section> and END:<section> markers matching the same section name, the API will auto-extract the body for you. If it contains markers for a DIFFERENT section, the call is rejected to prevent silent doubling. Use dryRun=true on large patches to verify the size delta before committing.",
     {
       section: z.string().describe("Section name matching comment markers in the stylesheet (e.g., 'hero' matches /* START:hero */ ... /* END:hero */)"),
-      css: z.string().optional().describe("Replacement CSS for the section"),
-      cssFile: z.string().optional().describe("Local file path containing replacement CSS. Use instead of css for large blocks."),
+      css: z.string().optional().describe("Replacement CSS for the section. Send only the body content (not a full stylesheet)."),
+      cssFile: z.string().optional().describe("Local file path containing replacement CSS. The file may contain matching START:/END: markers for the named section — if present, the body between them is auto-extracted. If the file contains markers for a different section, the call is rejected."),
+      dryRun: z.boolean().optional().describe("When true, return the size delta the change would produce without writing. Strongly recommended before any large patch."),
     },
     async (params) => {
       let css = params.css;
@@ -155,7 +169,7 @@ export function registerTemplateTools(server: McpServer, client: ThinCMSClient) 
       if (!css) {
         return formatResult({ ok: false, status: 0, data: { error: "Provide css or cssFile" } });
       }
-      const result = await client.patch("/template", { mode: "patch", section: params.section, css });
+      const result = await client.patch("/template", { mode: "patch", section: params.section, css, ...(params.dryRun ? { dryRun: true } : {}) });
       return formatResult(result);
     }
   );

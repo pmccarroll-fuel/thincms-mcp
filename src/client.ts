@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import { lookup } from "node:dns/promises";
 import type { ThinCMSConfig, SiteProfile } from "./config.js";
 import type { ApiResult } from "./types.js";
+import { getCurrentOverride } from "./helpers.js";
 
 export class ThinCMSClient {
   private baseUrl: string;
@@ -10,6 +11,7 @@ export class ThinCMSClient {
   private siteId: string;
   private sites: SiteProfile[];
   private activeSiteName: string;
+  private productionSiteIds: Set<string>;
 
   constructor(config: ThinCMSConfig) {
     this.baseUrl = config.baseUrl;
@@ -17,10 +19,19 @@ export class ThinCMSClient {
     this.siteId = config.siteId;
     this.sites = config.sites;
     this.activeSiteName = config.sites[0].name;
+    this.productionSiteIds = new Set(config.productionSiteIds ?? []);
   }
 
   getSites(): SiteProfile[] {
     return this.sites;
+  }
+
+  isProductionSite(siteId: string): boolean {
+    return this.productionSiteIds.has(siteId);
+  }
+
+  getProductionSiteIds(): string[] {
+    return Array.from(this.productionSiteIds);
   }
 
   getActiveSite(): { name: string; siteId: string } {
@@ -39,9 +50,34 @@ export class ThinCMSClient {
   }
 
   private get headers(): Record<string, string> {
+    // Per-call override (set by siteAwareTool via AsyncLocalStorage) wins
+    // over the persistent active-site state. When no override is in effect
+    // — single-tenant flows, switch_site users — falls back to instance
+    // state and behaves exactly as before.
+    const override = getCurrentOverride();
     return {
-      "X-API-Key": this.apiKey,
-      "X-Site-Id": this.siteId,
+      "X-API-Key": override?.apiKey ?? this.apiKey,
+      "X-Site-Id": override?.siteId ?? this.siteId,
+    };
+  }
+
+  // Production-site write guard. Returns an error ApiResult when the call
+  // would write to a site listed in THINCMS_PRODUCTION_SITE_IDS without an
+  // explicit confirmProductionWrite acknowledgement; null when the call is
+  // allowed to proceed.
+  private checkProductionWrite(): ApiResult | null {
+    const override = getCurrentOverride();
+    const targetSiteId = override?.siteId ?? this.siteId;
+    if (!this.productionSiteIds.has(targetSiteId)) return null;
+    if (override?.confirmProductionWrite === true) return null;
+    const profile = this.sites.find((s) => s.siteId === targetSiteId);
+    const label = profile ? `${profile.name} [${targetSiteId}]` : targetSiteId;
+    return {
+      ok: false,
+      status: 403,
+      data: {
+        error: `Refusing to write to production site ${label} — it is in THINCMS_PRODUCTION_SITE_IDS. Take a snapshot first (thincms_snapshot) so the write is reversible, then re-call with confirmProductionWrite: true to acknowledge.`,
+      },
     };
   }
 
@@ -84,7 +120,48 @@ export class ThinCMSClient {
     });
   }
 
+  /**
+   * GET a binary or text payload (PDF, CSV, Markdown) and return the raw bytes
+   * plus content-type/disposition headers. On HTTP error, attempts to parse a
+   * JSON body and returns it via the data field.
+   */
+  async getRaw(
+    path: string,
+    params?: Record<string, string>,
+  ): Promise<
+    | { ok: true; kind: "binary"; status: number; bytes: Uint8Array; contentType: string; filename: string | null }
+    | { ok: false; kind: "error"; status: number; data: any }
+  > {
+    try {
+      const res = await fetch(this.url(path, params), {
+        method: "GET",
+        headers: this.headers,
+      });
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type") || "";
+        const data = contentType.includes("application/json") ? await res.json() : await res.text();
+        return { ok: false, kind: "error", status: res.status, data };
+      }
+      const contentType = res.headers.get("content-type") || "";
+      const cd = res.headers.get("content-disposition") || "";
+      const match = /filename="([^"]+)"/.exec(cd);
+      const buf = await res.arrayBuffer();
+      return {
+        ok: true,
+        kind: "binary",
+        status: res.status,
+        bytes: new Uint8Array(buf),
+        contentType,
+        filename: match ? match[1] : null,
+      };
+    } catch (err: any) {
+      return { ok: false, kind: "error", status: 0, data: { error: `Network error: ${err.message}` } };
+    }
+  }
+
   async post(path: string, body: any): Promise<ApiResult> {
+    const guard = this.checkProductionWrite();
+    if (guard) return guard;
     return this.request(this.url(path), {
       method: "POST",
       headers: { ...this.headers, "Content-Type": "application/json" },
@@ -93,6 +170,8 @@ export class ThinCMSClient {
   }
 
   async put(path: string, body: any): Promise<ApiResult> {
+    const guard = this.checkProductionWrite();
+    if (guard) return guard;
     return this.request(this.url(path), {
       method: "PUT",
       headers: { ...this.headers, "Content-Type": "application/json" },
@@ -101,6 +180,8 @@ export class ThinCMSClient {
   }
 
   async patch(path: string, body: any): Promise<ApiResult> {
+    const guard = this.checkProductionWrite();
+    if (guard) return guard;
     return this.request(this.url(path), {
       method: "PATCH",
       headers: { ...this.headers, "Content-Type": "application/json" },
@@ -109,6 +190,8 @@ export class ThinCMSClient {
   }
 
   async delete(path: string): Promise<ApiResult> {
+    const guard = this.checkProductionWrite();
+    if (guard) return guard;
     return this.request(this.url(path), {
       method: "DELETE",
       headers: this.headers,
@@ -173,6 +256,8 @@ export class ThinCMSClient {
       }
     }
 
+    const guard = this.checkProductionWrite();
+    if (guard) return guard;
     return this.request(this.url(path), {
       method: "POST",
       headers: this.headers,
@@ -229,6 +314,8 @@ export class ThinCMSClient {
       };
     }
 
+    const guard = this.checkProductionWrite();
+    if (guard) return guard;
     return this.request(this.url(path), {
       method: "PUT",
       headers: this.headers,

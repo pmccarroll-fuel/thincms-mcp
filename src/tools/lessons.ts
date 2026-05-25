@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerLessonTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_lesson",
     "Create a new lesson within a module. Content is raw HTML. Lessons are auto-ordered within their module. For large content (>10KB), use contentFile instead of content.",
     {
@@ -36,7 +36,7 @@ export function registerLessonTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_lesson",
     "Get a single lesson by ID, including its attachments.",
     {
@@ -48,7 +48,7 @@ export function registerLessonTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_lesson",
     "Update an existing lesson. Only provided fields are changed (partial update). For large content (>10KB), use contentFile.",
     {
@@ -79,7 +79,7 @@ export function registerLessonTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_lesson",
     "Delete a lesson and its attachments.",
     {
@@ -91,7 +91,7 @@ export function registerLessonTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_upload_lesson_attachment",
     "Upload a file attachment to a lesson. Provide a local file path, a URL to download from, or base64-encoded content.",
     {
@@ -112,7 +112,7 @@ export function registerLessonTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_lesson_attachment",
     "Delete a file attachment from a lesson.",
     {
@@ -125,7 +125,7 @@ export function registerLessonTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_lesson_attachment_url",
     "Get the download URL for a lesson attachment. Returns the URL path — append to your base URL to download.",
     {

@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerSeoTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_seo_audit",
     "Run an SEO audit across all published posts and pages. Reports missing meta descriptions, missing meta titles, title length issues, missing OG images, thin content, missing excerpts, and duplicate titles. Returns a summary with score and a list of issues per item.",
     {},
@@ -14,7 +14,7 @@ export function registerSeoTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_seo_analyze",
     "Analyze a single post or page for SEO signals. Returns word count, heading structure, image count (with missing alt detection), internal/external link counts, meta field lengths, and actionable suggestions.",
     {
@@ -27,7 +27,7 @@ export function registerSeoTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_seo_check_links",
     "Scan published content for broken links. By default checks internal links only (fast). Set checkExternal=true to also verify external URLs via HEAD requests (slower, limited to 50 URLs). Optionally scope to a single post or page by providing type and id.",
     {

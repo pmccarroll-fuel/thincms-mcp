@@ -9,6 +9,11 @@ export interface ThinCMSConfig {
   apiKey: string;
   siteId: string;
   sites: SiteProfile[];
+  // Site IDs that should be treated as production. When set, any write tool
+  // (POST/PUT/PATCH/DELETE) targeting one of these sites requires
+  // confirmProductionWrite: true on the call. Acts as a backstop against
+  // accidental production writes from a session intended for testing.
+  productionSiteIds: string[];
 }
 
 export function loadConfig(): ThinCMSConfig {
@@ -49,6 +54,7 @@ export function loadConfig(): ThinCMSConfig {
       apiKey: sites[0].apiKey,
       siteId: sites[0].siteId,
       sites,
+      productionSiteIds: parseProductionSiteIds(),
     };
   }
 
@@ -73,5 +79,12 @@ export function loadConfig(): ThinCMSConfig {
     apiKey: apiKey!,
     siteId: siteId!,
     sites: [{ name: "default", siteId: siteId!, apiKey: apiKey! }],
+    productionSiteIds: parseProductionSiteIds(),
   };
+}
+
+function parseProductionSiteIds(): string[] {
+  const raw = process.env.THINCMS_PRODUCTION_SITE_IDS;
+  if (!raw) return [];
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }

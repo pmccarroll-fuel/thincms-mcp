@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 const socialLinkSchema = z.object({
   platform: z.enum([
@@ -14,7 +14,7 @@ const socialLinkSchema = z.object({
 });
 
 export function registerSocialLinksTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_social_links",
     "Get the site's social media links. These render in the footer via the {{social:links}} template tag.",
     {},
@@ -24,7 +24,7 @@ export function registerSocialLinksTools(server: McpServer, client: ThinCMSClien
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_social_links",
     "Replace the site's social media links (max 20). Each link needs a platform and URL. Supported platforms: linkedin, twitter, youtube, facebook, instagram, tiktok, github, email, website, custom. Use {{social:links}} in the page frame template to render them.",
     {

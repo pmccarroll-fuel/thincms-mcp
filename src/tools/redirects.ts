@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerRedirectTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_redirects",
     "List all URL redirects. Optionally filter by enabled status.",
     {
@@ -17,7 +17,7 @@ export function registerRedirectTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_redirect",
     "Get a single redirect by ID.",
     {
@@ -29,7 +29,7 @@ export function registerRedirectTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_redirect",
     "Create a URL redirect. Source path must start with /. Use /* suffix for wildcard matching.",
     {
@@ -45,7 +45,7 @@ export function registerRedirectTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_redirect",
     "Update an existing redirect. Only provided fields are changed.",
     {
@@ -63,7 +63,7 @@ export function registerRedirectTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_redirect",
     "Delete a redirect by ID.",
     {
@@ -75,7 +75,7 @@ export function registerRedirectTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_import_redirects",
     "Bulk import redirects from a JSON array. Existing redirects with the same sourcePath are updated (upsert).",
     {

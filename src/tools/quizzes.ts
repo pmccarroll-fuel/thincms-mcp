@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerQuizTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_quiz",
     "Create a new quiz within a module. Quizzes share sort order with lessons — use thincms_reorder_module_items to position them. Two feedback modes: 'show_answer' reveals correct answers after submission, 'retry' shows only the score.",
     {
@@ -20,7 +20,7 @@ export function registerQuizTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_quiz",
     "Get a single quiz by ID, including its questions with correct answers.",
     {
@@ -32,7 +32,7 @@ export function registerQuizTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_quiz",
     "Update a quiz. Only provided fields are changed.",
     {
@@ -49,7 +49,7 @@ export function registerQuizTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_quiz",
     "Delete a quiz and all its questions and attempts.",
     {
@@ -61,7 +61,7 @@ export function registerQuizTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_add_quiz_question",
     "Add a question to a quiz. Each question has 2-5 answer options and one correct answer identified by index (0-based).",
     {
@@ -82,7 +82,7 @@ export function registerQuizTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_quiz_question",
     "Update a quiz question. Only provided fields are changed.",
     {
@@ -105,7 +105,7 @@ export function registerQuizTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_quiz_question",
     "Delete a question from a quiz.",
     {

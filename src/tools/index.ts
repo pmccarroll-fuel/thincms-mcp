@@ -1,5 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ThinCMSClient } from "../client.js";
+import { recordToolName } from "../helpers.js";
+import { registerCapabilitiesTool } from "./capabilities.js";
+import { registerSnapshotTools } from "./snapshots.js";
 import { registerPostTools } from "./posts.js";
 import { registerPageTools } from "./pages.js";
 import { registerCategoryTools } from "./categories.js";
@@ -27,14 +30,26 @@ import { registerSeoTools } from "./seo.js";
 import { registerCourseTools } from "./courses.js";
 import { registerLessonTools } from "./lessons.js";
 import { registerQuizTools } from "./quizzes.js";
+import { registerWorkbookTools } from "./workbooks.js";
 import { registerEnrollmentTools } from "./enrollments.js";
 import { registerSubscriberTools } from "./subscribers.js";
 import { registerLeadMagnetTools } from "./lead-magnets.js";
 import { registerIntegrationTools } from "./integrations.js";
 import { registerCampaignTools } from "./campaigns.js";
 import { registerSequenceTools } from "./sequences.js";
+import { registerReviewTools } from "./reviews.js";
 
 export function registerAllTools(server: McpServer, client: ThinCMSClient) {
+  // Wrap server.tool to record every registered name into the central
+  // tool registry. thincms_capabilities reads it back to surface the live
+  // tool surface — lets agents detect when their MCP host has cached a
+  // stale schema set despite a current version stamp.
+  const realTool = (server as any).tool.bind(server);
+  (server as any).tool = (name: string, ...rest: any[]) => {
+    recordToolName(name);
+    return realTool(name, ...rest);
+  };
+
   registerPostTools(server, client);
   registerPageTools(server, client);
   registerCategoryTools(server, client);
@@ -62,10 +77,14 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   registerCourseTools(server, client);
   registerLessonTools(server, client);
   registerQuizTools(server, client);
+  registerWorkbookTools(server, client);
   registerEnrollmentTools(server, client);
   registerSubscriberTools(server, client);
   registerLeadMagnetTools(server, client);
   registerIntegrationTools(server, client);
   registerCampaignTools(server, client);
   registerSequenceTools(server, client);
+  registerReviewTools(server, client);
+  registerSnapshotTools(server, client);  // Snapshot/restore safety tools
+  registerCapabilitiesTool(server, client);  // Last — reads the populated registry
 }

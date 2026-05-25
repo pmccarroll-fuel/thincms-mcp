@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerSecretTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_secrets",
     "List environment variable secrets. Returns key names and descriptions only — values are never returned for security.",
     {},
@@ -14,7 +14,7 @@ export function registerSecretTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_secret",
     "Create a new environment variable secret. The value is stored securely and never returned in API responses.",
     {

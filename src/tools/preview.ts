@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 const contentOverrideSchema = z.object({
   type: z.enum(["post", "page"]).describe("Content type"),
@@ -14,7 +14,7 @@ const contentOverrideSchema = z.object({
 });
 
 export function registerPreviewTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_preview",
     "Create a preview session with draft template or content overrides. Returns a token-based preview URL (valid for 2 hours). Use this to preview CSS/template changes or draft content without publishing.",
     {
@@ -29,7 +29,7 @@ export function registerPreviewTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_preview_url",
     "Get the full preview URL for a preview token. The URL can be opened in a browser to view the preview — no authentication required.",
     {

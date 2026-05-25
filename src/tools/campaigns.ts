@@ -1,10 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
+import { scheduledForSchema } from "../validation.js";
 
 export function registerCampaignTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_campaigns",
     "List email campaigns with optional status filter and pagination.",
     {
@@ -22,16 +23,19 @@ export function registerCampaignTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_campaign",
-    "Create a new email campaign (broadcast).",
+    "Create a campaign record in ThinCMS. This stores the email content; it does NOT push to the connected mail platform (e.g. ActiveCampaign) or deliver to recipients. Use thincms_send_campaign as the second step.",
     {
       name: z.string().describe("Campaign name"),
       subject: z.string().describe("Email subject line"),
       htmlContent: z.string().describe("Email HTML body"),
       listId: z.string().optional().describe("Override default list ID"),
       tagFilter: z.string().optional().describe("Only send to contacts with this tag"),
-      scheduledAt: z.string().optional().describe("ISO 8601 date for scheduled send (omit for immediate)"),
+      scheduledFor: scheduledForSchema.optional().describe(
+        'When the campaign should be delivered. Pass "immediate" to push to the mail platform now, or an ISO 8601 timestamp at least 60 minutes in the future to schedule. Omitting this is currently allowed (legacy fallback) but DEPRECATED — Phase 3 will require it.'
+      ),
+      scheduledAt: z.string().optional().describe("DEPRECATED — use scheduledFor. ISO 8601 timestamp."),
     },
     async (params) => {
       const result = await client.post("/campaigns", params);
@@ -39,7 +43,7 @@ export function registerCampaignTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_campaign",
     "Get a campaign by ID.",
     { id: z.string().describe("Campaign ID") },
@@ -49,7 +53,7 @@ export function registerCampaignTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_campaign",
     "Update a draft or scheduled campaign.",
     {
@@ -59,7 +63,10 @@ export function registerCampaignTools(server: McpServer, client: ThinCMSClient) 
       htmlContent: z.string().optional(),
       listId: z.string().optional(),
       tagFilter: z.string().optional(),
-      scheduledAt: z.string().optional().describe("ISO 8601 date for scheduled send, or null to clear"),
+      scheduledFor: scheduledForSchema.optional().describe(
+        'Override the schedule: "immediate" or an ISO 8601 timestamp at least 60 minutes in the future.'
+      ),
+      scheduledAt: z.string().optional().describe("DEPRECATED — use scheduledFor. ISO 8601 timestamp, or null to clear."),
     },
     async (params) => {
       const { id, ...body } = params;
@@ -68,7 +75,7 @@ export function registerCampaignTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_campaign",
     "Delete a campaign.",
     { id: z.string().describe("Campaign ID") },
@@ -78,17 +85,23 @@ export function registerCampaignTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_send_campaign",
-    "Send or schedule a campaign via the connected email platform. If scheduledAt is set on the campaign, it will be scheduled for future delivery; otherwise sent immediately.",
-    { id: z.string().describe("Campaign ID") },
+    'Push the campaign to the connected mail platform (e.g. ActiveCampaign) and request delivery. If scheduledFor is "immediate" (or the legacy scheduledAt is empty), the platform begins sending right away. If scheduledFor is a future timestamp (or scheduledAt is set), the platform queues it for that time. Returns success when the platform accepts the queue request — actual recipient delivery is asynchronous and reported via thincms_campaign_stats. Optionally pass scheduledFor here to override the stored schedule in the same call.',
+    {
+      id: z.string().describe("Campaign ID"),
+      scheduledFor: scheduledForSchema.optional().describe(
+        'Optional override of the stored schedule. "immediate" or an ISO 8601 timestamp at least 60 minutes in the future.'
+      ),
+    },
     async (params) => {
-      const result = await client.post(`/campaigns/${params.id}/send`, {});
+      const { id, ...body } = params;
+      const result = await client.post(`/campaigns/${id}/send`, body);
       return formatResult(result);
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_campaign_stats",
     "Get campaign performance statistics (sent, opens, clicks, unsubscribes).",
     { id: z.string().describe("Campaign ID") },

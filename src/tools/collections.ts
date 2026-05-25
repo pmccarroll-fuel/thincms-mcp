@@ -1,12 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerCollectionTools(server: McpServer, client: ThinCMSClient) {
   // --- Collection CRUD ---
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_collections",
     "List all collections for the site. Collections are structured data lists (testimonials, reviews, products, team members) that render via {{collection:slug}} template tag in multiple display modes: cards, carousel, banner, list, compact.",
     {
@@ -19,7 +19,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_collection",
     "Get a single collection by ID, including all its items.",
     {
@@ -31,7 +31,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_collection",
     "Create a new collection. Display modes: 'cards' (grid), 'carousel' (horizontal scroll), 'banner' (full-width rotating), 'list' (vertical stack), 'compact' (smaller grid). Embed with {{collection:slug}} in page frame or content.",
     {
@@ -50,6 +50,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
       advanceInterval: z.number().optional().describe("Seconds between auto-advance slides (default: 5)"),
       enabled: z.boolean().optional().describe("Whether the collection is active (default: true)"),
       sortOrder: z.number().optional().describe("Sort order for listing (default: 0)"),
+      schemaType: z.enum(["none", "faq"]).optional().describe("Schema.org type to auto-emit on pages that render this collection via {{collection:slug}}. 'faq' emits FAQPage JSON-LD using each item's title as the question and body as the answer. Default 'none'."),
     },
     async (params) => {
       const result = await client.post("/collections", params);
@@ -57,7 +58,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_collection",
     "Update collection settings. Supports partial updates.",
     {
@@ -77,6 +78,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
       advanceInterval: z.number().optional().describe("Seconds between auto-advance slides"),
       enabled: z.boolean().optional().describe("Whether the collection is active"),
       sortOrder: z.number().optional().describe("Sort order"),
+      schemaType: z.enum(["none", "faq"]).optional().describe("Schema.org type to auto-emit. 'faq' emits FAQPage JSON-LD on pages that render this collection."),
     },
     async (params) => {
       const { id, ...data } = params;
@@ -85,7 +87,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_collection",
     "Delete a collection and all its items. Any {{collection:slug}} references will render as empty.",
     {
@@ -99,7 +101,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
 
   // --- Collection Item CRUD ---
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_collection_items",
     "List all items in a collection, ordered by sortOrder.",
     {
@@ -113,7 +115,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_collection_item",
     "Add an item to a collection. The 'body' field is required (main content, can be HTML). Other fields are optional and visibility depends on the collection's show* settings.",
     {
@@ -135,7 +137,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_collection_item",
     "Update a collection item. Supports partial updates.",
     {
@@ -158,7 +160,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_collection_item",
     "Delete an item from a collection.",
     {
@@ -171,7 +173,7 @@ export function registerCollectionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_reorder_collection_items",
     "Bulk reorder items in a collection. Pass an array of { id, sortOrder } pairs.",
     {

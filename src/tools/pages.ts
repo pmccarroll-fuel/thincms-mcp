@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, summarizeContentResponse, siteAwareTool } from "../helpers.js";
 
 export function registerPageTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_pages",
     "List static pages with optional status filter and pagination.",
     {
@@ -23,7 +23,7 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_page",
     "Get a single static page by ID, including full HTML content.",
     {
@@ -35,7 +35,7 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_page",
     "Create a new static page. Content should be raw HTML. Use renderMode 'wrapped' for pages that use the site template, or 'standalone' for full custom HTML. For large content (>10KB), use contentFile instead of content to pass a local file path.",
     {
@@ -62,11 +62,12 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
         }
       }
       const result = await client.post("/pages", body);
+      if (result.ok) result.data = summarizeContentResponse(result.data);
       return formatResult(result);
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_page",
     "Update an existing static page. Only provided fields are changed (partial update). Content should be raw HTML. For large content (>10KB), use contentFile instead of content. Changing slug auto-creates a 301 redirect from the old URL.",
     {
@@ -94,11 +95,12 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
         }
       }
       const result = await client.put(`/pages/${id}`, body);
+      if (result.ok) result.data = summarizeContentResponse(result.data);
       return formatResult(result);
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_page",
     "Permanently delete a static page by ID.",
     {

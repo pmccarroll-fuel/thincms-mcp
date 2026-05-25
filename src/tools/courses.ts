@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_courses",
     "List courses with optional filters. Returns courses with module/enrollment counts.",
     {
@@ -22,7 +22,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_course",
     "Get a single course by ID, including its modules, lessons, and quizzes.",
     {
@@ -34,7 +34,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_course",
     "Create a new course or community. Courses start as draft by default. Set courseType to 'community' for ongoing recording libraries (modules become topics, lessons become recordings, content sorts newest-first). Set accessMode to control enrollment: 'free' (open), 'invite' (admin enrolls learners), or 'purchase' (Stripe payment required).",
     {
@@ -57,7 +57,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_course",
     "Update an existing course. Only provided fields are changed (partial update).",
     {
@@ -82,7 +82,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_course",
     "Delete a course and all its modules, lessons, quizzes, and enrollments.",
     {
@@ -94,7 +94,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_module",
     "Create a new module within a course. Modules are auto-ordered by creation sequence.",
     {
@@ -109,7 +109,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_module",
     "Update a module's title or description.",
     {
@@ -125,7 +125,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_module",
     "Delete a module and all its lessons and quizzes.",
     {
@@ -138,7 +138,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_reorder_modules",
     "Reorder modules within a course. Pass all module IDs in the desired order.",
     {
@@ -153,14 +153,14 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client,
     "thincms_reorder_module_items",
-    "Reorder lessons and quizzes within a module. Lessons and quizzes share a single sort order space — pass all items in the desired order with their type.",
+    "Reorder lessons, quizzes, and workbooks within a module. All three types share a single sort order space — pass all items in the desired order with their type.",
     {
       moduleId: z.string().describe("Module ID (required)"),
       items: z.array(z.object({
-        id: z.string().describe("Lesson or quiz ID"),
-        type: z.enum(["lesson", "quiz"]).describe("Item type"),
+        id: z.string().describe("Lesson, quiz, or workbook ID"),
+        type: z.enum(["lesson", "quiz", "workbook"]).describe("Item type"),
       })).describe("Array of items in desired order"),
     },
     async (params) => {

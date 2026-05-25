@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 const formFieldSchema = z.object({
   name: z.string().describe("Field name (used as key in submissions)"),
@@ -14,7 +14,7 @@ const formFieldSchema = z.object({
 });
 
 export function registerFormTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_forms",
     "List all forms and surveys with submission counts.",
     {},
@@ -24,7 +24,7 @@ export function registerFormTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_form",
     "Get a single form by ID with full field definitions and configuration.",
     {
@@ -36,7 +36,7 @@ export function registerFormTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_form",
     "Create a new form or survey. Use renderMode 'fields' for standard forms (with field definitions) or 'html' for custom HTML surveys served at /s/:slug. Use preset 'contact' or 'newsletter' for pre-configured field sets. For large HTML content (>10KB), use htmlContentFile instead of htmlContent to pass a local file path.",
     {
@@ -68,7 +68,7 @@ export function registerFormTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_form",
     "Update an existing form or survey. Only provided fields are changed. For large HTML content (>10KB), use htmlContentFile instead of htmlContent.",
     {

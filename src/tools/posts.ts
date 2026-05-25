@@ -2,10 +2,11 @@ import { readFile } from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult, stripContentFromList } from "../helpers.js";
+import { formatResult, stripContentFromList, summarizeContentResponse, siteAwareTool } from "../helpers.js";
+import { scheduledForSchema } from "../validation.js";
 
 export function registerPostTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_posts",
     "List blog posts with optional filters. Returns posts without content by default (use includeContent=true for full HTML). Supports pagination.",
     {
@@ -42,7 +43,7 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_post",
     "Get a single blog post by ID, including full HTML content, author, categories, and tags.",
     {
@@ -54,9 +55,9 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_post",
-    "Create a new blog post. Content should be raw HTML. Tags are auto-created if they don't exist. Set status to 'published' to publish immediately, or 'draft' to save without publishing. For large content (>10KB), use contentFile instead of content to pass a local file path.",
+    'Create a blog post. Content should be raw HTML. Tags are auto-created if they don\'t exist. For large content (>10KB), use contentFile instead of content. Posts with status="published" and a publishedAt in the past appear on the public site immediately; a future publishedAt is auto-scheduling — they appear when the timestamp passes (no worker required, the public site filters by date). Posts with status="draft" never appear publicly regardless of dates. Use scheduledFor="immediate" to publish now, or scheduledFor=<ISO timestamp at least 60 min in the future> to schedule.',
     {
       title: z.string().describe("Post title (required)"),
       content: z.string().optional().describe("HTML content of the post"),
@@ -65,8 +66,11 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
       slug: z.string().optional().describe("URL slug (auto-generated from title if omitted)"),
       authorId: z.string().optional().describe("Author ID"),
       status: z.enum(["draft", "published", "archived"]).optional().describe("Post status (default: draft)"),
-      publishedAt: z.string().optional().describe("ISO date for publication date"),
-      scheduledAt: z.string().optional().describe("ISO date for scheduled publishing"),
+      scheduledFor: scheduledForSchema.optional().describe(
+        'When the post should become public. Pass "immediate" to publish now, or an ISO 8601 timestamp at least 60 minutes in the future to schedule. Required at status="published" — Phase 3 will reject omission. Posts with status="draft" ignore this field.'
+      ),
+      publishedAt: z.string().optional().describe("DEPRECATED — use scheduledFor. ISO date for publication date."),
+      scheduledAt: z.string().optional().describe("DEPRECATED — use scheduledFor. Legacy field, no longer affects visibility."),
       featured: z.boolean().optional().describe("Mark as featured post"),
       pinnedUntil: z.string().optional().describe("ISO date: pin post until this date"),
       series: z.string().optional().describe("Series name for multi-part content"),
@@ -93,11 +97,12 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
         }
       }
       const result = await client.post("/posts", body);
+      if (result.ok) result.data = summarizeContentResponse(result.data);
       return formatResult(result);
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_post",
     "Update an existing blog post. Only provided fields are changed (partial update). Content should be raw HTML. For large content (>10KB), use contentFile instead of content. Changing slug auto-creates a 301 redirect from the old URL.",
     {
@@ -109,8 +114,11 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
       slug: z.string().optional().describe("URL slug (changing slug auto-creates a 301 redirect)"),
       authorId: z.string().optional().describe("Author ID"),
       status: z.enum(["draft", "published", "archived"]).optional().describe("Post status"),
-      publishedAt: z.string().optional().describe("ISO date for publication date"),
-      scheduledAt: z.string().optional().describe("ISO date for scheduled publishing"),
+      scheduledFor: scheduledForSchema.optional().describe(
+        'Override visibility timing. "immediate" or an ISO 8601 timestamp at least 60 minutes in the future.'
+      ),
+      publishedAt: z.string().optional().describe("DEPRECATED — use scheduledFor. ISO date for publication date."),
+      scheduledAt: z.string().optional().describe("DEPRECATED — use scheduledFor. Legacy field."),
       featured: z.boolean().optional().describe("Mark as featured"),
       pinnedUntil: z.string().optional().describe("ISO date: pin until this date"),
       series: z.string().optional().describe("Series name"),
@@ -137,11 +145,12 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
         }
       }
       const result = await client.put(`/posts/${id}`, body);
+      if (result.ok) result.data = summarizeContentResponse(result.data);
       return formatResult(result);
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_post",
     "Permanently delete a blog post by ID.",
     {
@@ -153,7 +162,7 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_post_preview_url",
     "Get a signed preview URL for a blog post. Works for any status (draft, scheduled, future-dated, published). The URL is valid for 72 hours and requires no authentication to view. Use this after creating or updating a post to verify how it looks on the live site.",
     {
@@ -165,9 +174,9 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_bulk_create_posts",
-    "Create up to 100 blog posts in a single request. Each post follows the same schema as thincms_create_post.",
+    "Create up to 100 blog posts in a single request. Each post follows the same schema as thincms_create_post. Validation errors are reported per-item without failing the batch.",
     {
       posts: z.array(z.object({
         title: z.string().describe("Post title (required)"),
@@ -176,7 +185,10 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
         slug: z.string().optional(),
         authorId: z.string().optional(),
         status: z.enum(["draft", "published", "archived"]).optional(),
-        publishedAt: z.string().optional(),
+        scheduledFor: scheduledForSchema.optional().describe(
+          'When the post should become public. "immediate" or ISO 8601 timestamp at least 60 minutes in the future.'
+        ),
+        publishedAt: z.string().optional().describe("DEPRECATED — use scheduledFor."),
         featured: z.boolean().optional(),
         categoryIds: z.array(z.string()).optional(),
         tags: z.array(z.string()).optional(),

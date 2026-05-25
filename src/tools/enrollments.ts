@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_enrollments",
     "List course enrollments with optional filters. Returns enrollments with user and course details.",
     {
@@ -24,7 +24,7 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_enrollment",
     "Enroll a learner in a course. The user must already exist — specify by email or userId. This bypasses payment requirements, effectively creating a free/invite enrollment.",
     {
@@ -40,7 +40,7 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_enrollment",
     "Update an enrollment status. Use to approve pending enrollments or revoke access.",
     {
@@ -54,7 +54,7 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_enrollment",
     "Delete an enrollment permanently.",
     {

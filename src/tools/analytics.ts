@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerAnalyticsTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_analytics_summary",
     "Get analytics summary: total views, unique visitors, top page, views today. Period: 7d, 30d, or 90d.",
     {
@@ -17,7 +17,7 @@ export function registerAnalyticsTools(server: McpServer, client: ThinCMSClient)
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_analytics_top_pages",
     "Get top pages by views for a given period.",
     {
@@ -34,7 +34,7 @@ export function registerAnalyticsTools(server: McpServer, client: ThinCMSClient)
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_analytics_referrers",
     "Get top referrer domains for a given period.",
     {
@@ -51,7 +51,7 @@ export function registerAnalyticsTools(server: McpServer, client: ThinCMSClient)
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_analytics_trend",
     "Get daily views and visitors trend for a given period.",
     {

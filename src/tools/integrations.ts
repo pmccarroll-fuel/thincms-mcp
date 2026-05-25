@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerIntegrationTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_integration",
     "Get the site's email platform integration configuration.",
     {},
@@ -14,7 +14,7 @@ export function registerIntegrationTools(server: McpServer, client: ThinCMSClien
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_integration",
     "Configure a new email platform integration (one per site). Platform: activecampaign, kit, mailchimp, gohighlevel.",
     {
@@ -28,7 +28,7 @@ export function registerIntegrationTools(server: McpServer, client: ThinCMSClien
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_integration",
     "Update the email platform integration config.",
     {
@@ -44,7 +44,7 @@ export function registerIntegrationTools(server: McpServer, client: ThinCMSClien
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_test_integration",
     "Test the email platform connection.",
     {
@@ -56,7 +56,7 @@ export function registerIntegrationTools(server: McpServer, client: ThinCMSClien
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_sync_integration",
     "Bulk sync all subscribers to the email platform. Creates tags for lead magnets and pushes all subscribers.",
     {
@@ -68,7 +68,7 @@ export function registerIntegrationTools(server: McpServer, client: ThinCMSClien
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_integration_tags",
     "List all tags from the connected email platform.",
     {
@@ -80,7 +80,7 @@ export function registerIntegrationTools(server: McpServer, client: ThinCMSClien
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_integration_lists",
     "List all mailing lists from the connected email platform.",
     {

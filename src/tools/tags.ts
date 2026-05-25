@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerTagTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_tags",
     "List all tags with post counts.",
     {},
@@ -14,7 +14,7 @@ export function registerTagTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_tag",
     "Create a new tag. Note: tags are also auto-created when included in the tags array of a post.",
     {
@@ -28,7 +28,7 @@ export function registerTagTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_tag",
     "Get a single tag by ID, including associated posts.",
     {
@@ -40,7 +40,7 @@ export function registerTagTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_tag",
     "Update a tag's name, slug, or description.",
     {
@@ -56,7 +56,7 @@ export function registerTagTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_tag",
     "Delete a tag by ID. Removes the tag from all posts.",
     {

@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_media",
     "List uploaded media files with pagination. Returns file metadata including paths, dimensions, and alt text.",
     {
@@ -22,7 +22,7 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_media",
     "Get a single media item by ID with full metadata. The response includes a `variants` field with optimized WebP versions (thumbnail 400px, medium 800px, large 1200px) when available.",
     {
@@ -34,7 +34,7 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_upload_media",
     "Upload an image or file to the media library. Provide exactly one source: filePath (local file), url (download from URL), or base64 (encoded content with filename). For images, optimized WebP variants (thumbnail 400px, medium 800px, large 1200px) are automatically generated and returned in the `variants` field.",
     {
@@ -71,7 +71,7 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_media",
     "Update media metadata (alt text, caption, visibility). Does not change the file itself.",
     {
@@ -87,7 +87,7 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_media",
     "Delete a media item and remove the file from disk.",
     {
@@ -99,7 +99,7 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_generate_media_variants",
     "Generate optimized WebP image variants for all images in the media library that don't have them yet. Creates thumbnail (400px), medium (800px), and large (1200px) WebP versions. Admin-only.",
     {},

@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerLeadMagnetTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_lead_magnets",
     "List all lead magnets for the site.",
     {},
@@ -14,7 +14,7 @@ export function registerLeadMagnetTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_get_lead_magnet",
     "Get a single lead magnet by ID.",
     {
@@ -26,7 +26,7 @@ export function registerLeadMagnetTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_lead_magnet",
     "Create a new lead magnet. A lead magnet is a downloadable resource offered in exchange for a form submission (e.g., newsletter signup).",
     {
@@ -47,7 +47,7 @@ export function registerLeadMagnetTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_lead_magnet",
     "Update an existing lead magnet. Supports partial updates.",
     {
@@ -70,7 +70,7 @@ export function registerLeadMagnetTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_lead_magnet",
     "Delete a lead magnet by ID.",
     {

@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerScriptTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_scripts",
     "List all script injections (analytics, chat widgets, tracking pixels, etc.).",
     {},
@@ -14,7 +14,7 @@ export function registerScriptTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_script",
     "Create a script injection for the public site. Scripts can be placed in the <head> or before </body>.",
     {
@@ -30,7 +30,7 @@ export function registerScriptTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_script",
     "Update an existing script injection. Only provided fields are changed.",
     {

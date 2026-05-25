@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerSubmissionTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_submissions",
     "List form submissions with pagination. Returns submission data (field values) and timestamps.",
     {
@@ -21,7 +21,7 @@ export function registerSubmissionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_export_submissions_csv",
     "Export all submissions for a form as CSV data.",
     {
@@ -33,7 +33,7 @@ export function registerSubmissionTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_submission",
     "Delete a form submission by ID.",
     {

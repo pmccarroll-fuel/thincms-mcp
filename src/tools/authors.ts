@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerAuthorTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_authors",
     "List all authors with their bios, avatars, and post counts.",
     {},
@@ -14,7 +14,7 @@ export function registerAuthorTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_create_author",
     "Create a new author profile with bio, avatar, and social links.",
     {
@@ -32,7 +32,7 @@ export function registerAuthorTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_update_author",
     "Update an existing author profile. Only provided fields are changed.",
     {
@@ -52,7 +52,7 @@ export function registerAuthorTools(server: McpServer, client: ThinCMSClient) {
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_author",
     "Delete an author by ID. Posts by this author will have their author unset.",
     {

@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerSubscriberTools(server: McpServer, client: ThinCMSClient) {
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_list_subscribers",
     "List subscribers/members with optional search and pagination.",
     {
@@ -22,7 +22,7 @@ export function registerSubscriberTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_export_subscribers_csv",
     "Export all subscribers as CSV data.",
     {},
@@ -32,7 +32,7 @@ export function registerSubscriberTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  server.tool(
+  siteAwareTool(server, client, 
     "thincms_delete_subscriber",
     "Delete a subscriber by ID.",
     {

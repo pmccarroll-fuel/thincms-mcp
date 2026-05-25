@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult } from "../helpers.js";
+import { formatResult, formatText } from "../helpers.js";
 
 export function registerSiteTools(server: McpServer, client: ThinCMSClient) {
   server.tool(
@@ -10,42 +10,40 @@ export function registerSiteTools(server: McpServer, client: ThinCMSClient) {
     {},
     async () => {
       const sites = client.getSites();
-      const active = client.getActiveSite();
+      const originalActive = client.getActiveSite();
 
-      // Fetch settings for each site to get previewSlug, previewUrl, siteStatus
-      const enriched = await Promise.all(
-        sites.map(async (s) => {
-          const prev = client.getActiveSite();
+      // Sequential — switchSite mutates shared client state, so parallel
+      // iterations would race and could leave the client on the wrong site
+      // (which then drifts the marker on subsequent calls). The latency
+      // cost of N sequential GETs is negligible for the typical N (1–10).
+      const lines: Array<{ line: string; isActive: boolean }> = [];
+      try {
+        for (const s of sites) {
           client.switchSite(s.name);
           const result = await client.get("/settings");
-          // Restore previous active site
-          client.switchSite(prev.name);
 
           const settings = result.ok ? result.data?.settings : null;
-          const marker = s.siteId === active.siteId ? " (active)" : "";
+          const isActive = s.siteId === originalActive.siteId;
+          const marker = isActive ? "▸ ACTIVE" : "  ";
           const status = settings?.siteStatus || "unknown";
-          const previewSlug = settings?.previewSlug || null;
           const previewUrl = settings?.previewUrl || null;
 
-          let line = `- ${s.name}${marker} [${s.siteId}] — status: ${status}`;
-          if (previewSlug) {
-            line += `\n  preview: ${previewUrl}`;
-          }
-          if (settings?.domain) {
-            line += `\n  domain: ${settings.domain}`;
-          }
-          return line;
-        })
-      );
+          let line = `${marker}  ${s.name} [${s.siteId}] — status: ${status}`;
+          if (settings?.domain) line += `\n          domain: ${settings.domain}`;
+          if (previewUrl) line += `\n          preview: ${previewUrl}`;
+          lines.push({ line, isActive });
+        }
+      } finally {
+        // Always restore the original active site, even if a fetch threw.
+        client.switchSite(originalActive.name);
+      }
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Configured sites:\n${enriched.join("\n")}\n\nActive: ${active.name}`,
-          },
-        ],
-      };
+      lines.sort((a, b) => (a.isActive ? -1 : b.isActive ? 1 : 0));
+
+      return formatText(
+        `Configured sites (active site listed first):\n${lines.map(l => l.line).join("\n")}\n\n` +
+        `Tip: every tool response is prefixed with the active site name. Use thincms_switch_site to change tenants.`
+      );
     }
   );
 
@@ -58,39 +56,16 @@ export function registerSiteTools(server: McpServer, client: ThinCMSClient) {
     async ({ name }) => {
       const sites = client.getSites();
       if (sites.length <= 1) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Only one site is configured. Nothing to switch to.",
-            },
-          ],
-          isError: true,
-        };
+        return formatText("Only one site is configured. Nothing to switch to.", true);
       }
 
       const result = client.switchSite(name);
       if (!result) {
         const available = sites.map((s) => s.name).join(", ");
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Site "${name}" not found. Available sites: ${available}`,
-            },
-          ],
-          isError: true,
-        };
+        return formatText(`Site "${name}" not found. Available sites: ${available}`, true);
       }
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Switched to "${result.name}" [${result.siteId}]. All API calls will now target this site.`,
-          },
-        ],
-      };
+      return formatText(`Switched to "${result.name}" [${result.siteId}]. All API calls will now target this site.`);
     }
   );
 
