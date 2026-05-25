@@ -1,18 +1,41 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { lookup } from "node:dns/promises";
-import type { ThinCMSConfig } from "./config.js";
+import type { ThinCMSConfig, SiteProfile } from "./config.js";
 import type { ApiResult } from "./types.js";
 
 export class ThinCMSClient {
   private baseUrl: string;
   private apiKey: string;
   private siteId: string;
+  private sites: SiteProfile[];
+  private activeSiteName: string;
 
   constructor(config: ThinCMSConfig) {
     this.baseUrl = config.baseUrl;
     this.apiKey = config.apiKey;
     this.siteId = config.siteId;
+    this.sites = config.sites;
+    this.activeSiteName = config.sites[0].name;
+  }
+
+  getSites(): SiteProfile[] {
+    return this.sites;
+  }
+
+  getActiveSite(): { name: string; siteId: string } {
+    return { name: this.activeSiteName, siteId: this.siteId };
+  }
+
+  switchSite(name: string): { name: string; siteId: string } | null {
+    const profile = this.sites.find(
+      (s) => s.name.toLowerCase() === name.toLowerCase()
+    );
+    if (!profile) return null;
+    this.apiKey = profile.apiKey;
+    this.siteId = profile.siteId;
+    this.activeSiteName = profile.name;
+    return { name: profile.name, siteId: profile.siteId };
   }
 
   private get headers(): Record<string, string> {
@@ -72,6 +95,14 @@ export class ThinCMSClient {
   async put(path: string, body: any): Promise<ApiResult> {
     return this.request(this.url(path), {
       method: "PUT",
+      headers: { ...this.headers, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async patch(path: string, body: any): Promise<ApiResult> {
+    return this.request(this.url(path), {
+      method: "PATCH",
       headers: { ...this.headers, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });

@@ -32,4 +32,17 @@ export function registerSubmissionTools(server: McpServer, client: ThinCMSClient
       return formatResult(result);
     }
   );
+
+  server.tool(
+    "thincms_delete_submission",
+    "Delete a form submission by ID.",
+    {
+      formId: z.string().describe("Form ID (required)"),
+      submissionId: z.string().describe("Submission ID to delete"),
+    },
+    async (params) => {
+      const result = await client.delete(`/forms/${params.formId}/submissions/${params.submissionId}`);
+      return formatResult(result);
+    }
+  );
 }

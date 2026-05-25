@@ -15,6 +15,24 @@ import { registerFormTools } from "./forms.js";
 import { registerSubmissionTools } from "./submissions.js";
 import { registerSearchTools } from "./search.js";
 import { registerPreviewTools } from "./preview.js";
+import { registerSocialLinksTools } from "./social-links.js";
+import { registerContentBlockTools } from "./content-blocks.js";
+import { registerCollectionTools } from "./collections.js";
+import { registerPopupTools } from "./popups.js";
+import { registerShareButtonTools } from "./share-buttons.js";
+import { registerRedirectTools } from "./redirects.js";
+import { registerAnalyticsTools } from "./analytics.js";
+import { registerSiteTools } from "./sites.js";
+import { registerSeoTools } from "./seo.js";
+import { registerCourseTools } from "./courses.js";
+import { registerLessonTools } from "./lessons.js";
+import { registerQuizTools } from "./quizzes.js";
+import { registerEnrollmentTools } from "./enrollments.js";
+import { registerSubscriberTools } from "./subscribers.js";
+import { registerLeadMagnetTools } from "./lead-magnets.js";
+import { registerIntegrationTools } from "./integrations.js";
+import { registerCampaignTools } from "./campaigns.js";
+import { registerSequenceTools } from "./sequences.js";
 
 export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   registerPostTools(server, client);
@@ -32,4 +50,22 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   registerSubmissionTools(server, client);
   registerSearchTools(server, client);
   registerPreviewTools(server, client);
+  registerSocialLinksTools(server, client);
+  registerContentBlockTools(server, client);
+  registerCollectionTools(server, client);
+  registerPopupTools(server, client);
+  registerShareButtonTools(server, client);
+  registerRedirectTools(server, client);
+  registerAnalyticsTools(server, client);
+  registerSiteTools(server, client);
+  registerSeoTools(server, client);
+  registerCourseTools(server, client);
+  registerLessonTools(server, client);
+  registerQuizTools(server, client);
+  registerEnrollmentTools(server, client);
+  registerSubscriberTools(server, client);
+  registerLeadMagnetTools(server, client);
+  registerIntegrationTools(server, client);
+  registerCampaignTools(server, client);
+  registerSequenceTools(server, client);
 }

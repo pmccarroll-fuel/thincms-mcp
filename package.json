@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "thincms-mcp": "./bin/thincms-mcp.js"
+    "thincms-mcp": "bin/thincms-mcp.js"
   },
   "scripts": {
     "build": "tsc",

@@ -24,7 +24,7 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
 
   server.tool(
     "thincms_get_media",
-    "Get a single media item by ID with full metadata.",
+    "Get a single media item by ID with full metadata. The response includes a `variants` field with optimized WebP versions (thumbnail 400px, medium 800px, large 1200px) when available.",
     {
       id: z.string().describe("Media ID"),
     },
@@ -36,7 +36,7 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
 
   server.tool(
     "thincms_upload_media",
-    "Upload an image or file to the media library. Provide exactly one source: filePath (local file), url (download from URL), or base64 (encoded content with filename).",
+    "Upload an image or file to the media library. Provide exactly one source: filePath (local file), url (download from URL), or base64 (encoded content with filename). For images, optimized WebP variants (thumbnail 400px, medium 800px, large 1200px) are automatically generated and returned in the `variants` field.",
     {
       filePath: z.string().optional().describe("Absolute path to a local file"),
       url: z.string().optional().describe("URL to download and upload"),
@@ -95,6 +95,16 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
     },
     async (params) => {
       const result = await client.delete(`/media/${params.id}`);
+      return formatResult(result);
+    }
+  );
+
+  server.tool(
+    "thincms_generate_media_variants",
+    "Generate optimized WebP image variants for all images in the media library that don't have them yet. Creates thumbnail (400px), medium (800px), and large (1200px) WebP versions. Admin-only.",
+    {},
+    async () => {
+      const result = await client.post("/media/generate-variants", {});
       return formatResult(result);
     }
   );

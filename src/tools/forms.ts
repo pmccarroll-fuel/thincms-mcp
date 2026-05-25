@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
@@ -37,7 +38,7 @@ export function registerFormTools(server: McpServer, client: ThinCMSClient) {
 
   server.tool(
     "thincms_create_form",
-    "Create a new form or survey. Use renderMode 'fields' for standard forms (with field definitions) or 'html' for custom HTML surveys served at /s/:slug. Use preset 'contact' or 'newsletter' for pre-configured field sets.",
+    "Create a new form or survey. Use renderMode 'fields' for standard forms (with field definitions) or 'html' for custom HTML surveys served at /s/:slug. Use preset 'contact' or 'newsletter' for pre-configured field sets. For large HTML content (>10KB), use htmlContentFile instead of htmlContent to pass a local file path.",
     {
       name: z.string().describe("Form name (required)"),
       slug: z.string().optional().describe("URL slug (auto-generated from name if omitted)"),
@@ -46,6 +47,7 @@ export function registerFormTools(server: McpServer, client: ThinCMSClient) {
       renderMode: z.enum(["fields", "html"]).optional().describe("'fields' for standard forms, 'html' for custom survey HTML (default: fields)"),
       fields: z.array(formFieldSchema).optional().describe("Field definitions (for renderMode 'fields')"),
       htmlContent: z.string().optional().describe("Custom HTML content (for renderMode 'html', served at /s/:slug)"),
+      htmlContentFile: z.string().optional().describe("Local file path containing HTML content — use this instead of htmlContent for large surveys (>10KB). The file is read and sent as htmlContent."),
       webhookUrl: z.string().optional().describe("URL to receive submission payloads via POST"),
       webhookUrlTest: z.string().optional().describe("Test webhook URL (auto-deactivates after one delivery)"),
       webhookTestMode: z.boolean().optional().describe("Enable test mode for webhook"),
@@ -53,14 +55,22 @@ export function registerFormTools(server: McpServer, client: ThinCMSClient) {
       enabled: z.boolean().optional().describe("Enable/disable form (default: true)"),
     },
     async (params) => {
-      const result = await client.post("/forms", params);
+      const { htmlContentFile, ...body } = params;
+      if (htmlContentFile) {
+        try {
+          body.htmlContent = await readFile(htmlContentFile, "utf-8");
+        } catch (err: any) {
+          return formatResult({ ok: false, status: 0, data: { error: `Failed to read file: ${err.message}` } });
+        }
+      }
+      const result = await client.post("/forms", body);
       return formatResult(result);
     }
   );
 
   server.tool(
     "thincms_update_form",
-    "Update an existing form or survey. Only provided fields are changed.",
+    "Update an existing form or survey. Only provided fields are changed. For large HTML content (>10KB), use htmlContentFile instead of htmlContent.",
     {
       id: z.string().describe("Form ID (required)"),
       name: z.string().optional().describe("Form name"),
@@ -69,6 +79,7 @@ export function registerFormTools(server: McpServer, client: ThinCMSClient) {
       renderMode: z.enum(["fields", "html"]).optional().describe("Render mode"),
       fields: z.array(formFieldSchema).optional().describe("Field definitions"),
       htmlContent: z.string().optional().describe("Custom HTML content"),
+      htmlContentFile: z.string().optional().describe("Local file path containing HTML content — use this instead of htmlContent for large surveys (>10KB)."),
       webhookUrl: z.string().optional().describe("Webhook URL"),
       webhookUrlTest: z.string().optional().describe("Test webhook URL"),
       webhookTestMode: z.boolean().optional().describe("Enable test mode"),
@@ -76,7 +87,14 @@ export function registerFormTools(server: McpServer, client: ThinCMSClient) {
       enabled: z.boolean().optional().describe("Enable/disable form"),
     },
     async (params) => {
-      const { id, ...body } = params;
+      const { id, htmlContentFile, ...body } = params;
+      if (htmlContentFile) {
+        try {
+          body.htmlContent = await readFile(htmlContentFile, "utf-8");
+        } catch (err: any) {
+          return formatResult({ ok: false, status: 0, data: { error: `Failed to read file: ${err.message}` } });
+        }
+      }
       const result = await client.put(`/forms/${id}`, body);
       return formatResult(result);
     }

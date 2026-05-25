@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
@@ -36,10 +37,11 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
 
   server.tool(
     "thincms_create_page",
-    "Create a new static page. Content should be raw HTML. Use renderMode 'wrapped' for pages that use the site template, or 'standalone' for full custom HTML.",
+    "Create a new static page. Content should be raw HTML. Use renderMode 'wrapped' for pages that use the site template, or 'standalone' for full custom HTML. For large content (>10KB), use contentFile instead of content to pass a local file path.",
     {
       title: z.string().describe("Page title (required)"),
       content: z.string().optional().describe("HTML content"),
+      contentFile: z.string().optional().describe("Local file path containing HTML content — use this instead of content for large pages (>10KB). The file is read and sent as content."),
       slug: z.string().optional().describe("URL slug (auto-generated from title if omitted)"),
       status: z.enum(["draft", "published"]).optional().describe("Page status (default: draft)"),
       renderMode: z.enum(["wrapped", "standalone"]).optional().describe("Render mode (default: wrapped)"),
@@ -48,20 +50,30 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
       ogImageUrl: z.string().optional().describe("Open Graph image URL"),
       canonicalUrl: z.string().optional().describe("Canonical URL"),
       noIndex: z.boolean().optional().describe("Set true to add noindex meta tag"),
+      jsonLd: z.string().optional().describe("Custom JSON-LD (Schema.org) injected verbatim into the page <head>. Pass valid JSON as a string. Use for Service, Event, BreadcrumbList, HowTo, Article, etc. Set to empty string to clear."),
     },
     async (params) => {
-      const result = await client.post("/pages", params);
+      const { contentFile, ...body } = params;
+      if (contentFile) {
+        try {
+          body.content = await readFile(contentFile, "utf-8");
+        } catch (err: any) {
+          return formatResult({ ok: false, status: 0, data: { error: `Failed to read file: ${err.message}` } });
+        }
+      }
+      const result = await client.post("/pages", body);
       return formatResult(result);
     }
   );
 
   server.tool(
     "thincms_update_page",
-    "Update an existing static page. Only provided fields are changed (partial update). Content should be raw HTML.",
+    "Update an existing static page. Only provided fields are changed (partial update). Content should be raw HTML. For large content (>10KB), use contentFile instead of content. Changing slug auto-creates a 301 redirect from the old URL.",
     {
       id: z.string().describe("Page ID (required)"),
       title: z.string().optional().describe("Page title"),
       content: z.string().optional().describe("HTML content"),
+      contentFile: z.string().optional().describe("Local file path containing HTML content — use this instead of content for large pages (>10KB)."),
       slug: z.string().optional().describe("URL slug"),
       status: z.enum(["draft", "published"]).optional().describe("Page status"),
       renderMode: z.enum(["wrapped", "standalone"]).optional().describe("Render mode"),
@@ -70,9 +82,17 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
       ogImageUrl: z.string().optional().describe("Open Graph image URL"),
       canonicalUrl: z.string().optional().describe("Canonical URL"),
       noIndex: z.boolean().optional().describe("Set true to add noindex meta tag"),
+      jsonLd: z.string().optional().describe("Custom JSON-LD (Schema.org) injected verbatim into the page <head>. Pass valid JSON as a string. Use for Service, Event, BreadcrumbList, HowTo, Article, etc. Set to empty string to clear."),
     },
     async (params) => {
-      const { id, ...body } = params;
+      const { id, contentFile, ...body } = params;
+      if (contentFile) {
+        try {
+          body.content = await readFile(contentFile, "utf-8");
+        } catch (err: any) {
+          return formatResult({ ok: false, status: 0, data: { error: `Failed to read file: ${err.message}` } });
+        }
+      }
       const result = await client.put(`/pages/${id}`, body);
       return formatResult(result);
     }
