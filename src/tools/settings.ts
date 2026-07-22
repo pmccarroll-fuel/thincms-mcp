@@ -24,6 +24,7 @@ export function registerSettingsTools(server: McpServer, client: ThinCMSClient) 
       faviconUrl: z.string().optional().describe("Path or absolute URL of the site favicon."),
       googleVerification: z.string().optional().describe("Google Search Console verification token (rendered as a meta tag)."),
       bingVerification: z.string().optional().describe("Bing Webmaster Tools verification token (rendered as <meta name=\"msvalidate.01\">)."),
+      googleTagId: z.string().optional().describe("Google tag ID for analytics — gtag.js (G-/AW-/GT-) or GTM container (GTM-). The correct snippet is injected into <head> automatically. Set to empty string to clear."),
       ogImageUrl: z.string().optional().describe("Site-wide default Open Graph image URL. Used as the OG image when a page or post doesn't set its own ogImageUrl. Per-page values override this fallback."),
       memberFormSlug: z.string().optional().describe("Form slug used for membership/subscriber signup. Set to empty string to disable membership signup."),
       aiBrief: z.string().optional().describe("Customer-authored 'AI brief' — voice/positioning/about content rendered in the auto-generated /llms.txt under an 'About' heading. Use this for narrative content that doesn't fit the structured LocalBusiness fields. Set to empty string to clear."),
