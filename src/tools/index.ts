@@ -38,6 +38,7 @@ import { registerIntegrationTools } from "./integrations.js";
 import { registerCampaignTools } from "./campaigns.js";
 import { registerSequenceTools } from "./sequences.js";
 import { registerReviewTools } from "./reviews.js";
+import { registerToolTools } from "./tools.js";
 
 export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   // Wrap server.tool to record every registered name into the central
@@ -85,6 +86,7 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   registerCampaignTools(server, client);
   registerSequenceTools(server, client);
   registerReviewTools(server, client);
+  registerToolTools(server, client);
   registerSnapshotTools(server, client);  // Snapshot/restore safety tools
   registerCapabilitiesTool(server, client);  // Last — reads the populated registry
 }

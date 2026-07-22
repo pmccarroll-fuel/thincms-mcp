@@ -43,4 +43,31 @@ export function registerSubscriberTools(server: McpServer, client: ThinCMSClient
       return formatResult(result);
     }
   );
+
+  siteAwareTool(server, client,
+    "thincms_set_subscriber_password",
+    "Set a password for a subscriber. Admin action for bulk-provisioning end-users of Tools (mini-apps); skips the signup email flow. Password must meet strength rules (8+ chars, upper, lower, digit). Existing sessions for the subscriber are revoked so the new password takes effect everywhere.",
+    {
+      id: z.string().describe("Subscriber ID"),
+      password: z.string().min(8).describe("New password (min 8 chars, must include upper, lower, digit)"),
+    },
+    async (params) => {
+      const result = await client.post(`/subscribers/${encodeURIComponent(params.id)}/set-password`, {
+        password: params.password,
+      });
+      return formatResult(result);
+    },
+  );
+
+  siteAwareTool(server, client,
+    "thincms_send_verify_email",
+    "Send (or re-send) the email-verification email to a subscriber. Generates a fresh 24-hour verify token, invalidating any prior pending token. Rejected if the subscriber's email is already verified.",
+    {
+      id: z.string().describe("Subscriber ID"),
+    },
+    async (params) => {
+      const result = await client.post(`/subscribers/${encodeURIComponent(params.id)}/send-verify-email`, {});
+      return formatResult(result);
+    },
+  );
 }
