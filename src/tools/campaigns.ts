@@ -85,9 +85,9 @@ export function registerCampaignTools(server: McpServer, client: ThinCMSClient) 
     }
   );
 
-  siteAwareTool(server, client, 
+  siteAwareTool(server, client,
     "thincms_send_campaign",
-    'Push the campaign to the connected mail platform (e.g. ActiveCampaign) and request delivery. If scheduledFor is "immediate" (or the legacy scheduledAt is empty), the platform begins sending right away. If scheduledFor is a future timestamp (or scheduledAt is set), the platform queues it for that time. Returns success when the platform accepts the queue request — actual recipient delivery is asynchronous and reported via thincms_campaign_stats. Optionally pass scheduledFor here to override the stored schedule in the same call.',
+    'Push the campaign to the connected mail platform (e.g. ActiveCampaign) and request delivery. If scheduledFor is "immediate" (or the legacy scheduledAt is empty), the platform begins sending right away. If scheduledFor is a future timestamp (or scheduledAt is set), the platform queues it for that time. Returns success when the platform accepts the queue request — actual recipient delivery is asynchronous and reported via thincms_campaign_stats. Optionally pass scheduledFor here to override the stored schedule in the same call. WARNING — the platform locks the schedule at first send. To reschedule a campaign you have already sent, delete it and recreate it; a /send with a changed schedule against an already-queued campaign returns 409.',
     {
       id: z.string().describe("Campaign ID"),
       scheduledFor: scheduledForSchema.optional().describe(
