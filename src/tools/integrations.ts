@@ -20,7 +20,7 @@ export function registerIntegrationTools(server: McpServer, client: ThinCMSClien
     {
       platform: z.string().describe("Platform identifier (e.g. 'activecampaign')"),
       name: z.string().describe("User-facing label (e.g. 'My ActiveCampaign')"),
-      config: z.record(z.any()).describe("Platform-specific config (e.g. { apiUrl, apiKey, listId } for ActiveCampaign)"),
+      config: z.record(z.any()).describe("Platform-specific config. ActiveCampaign: { apiUrl, apiKey, listId, fromEmail?, fromName?, addressId? }. GoHighLevel: { apiKey (Private Integration Token), locationId, listId? (a Workflow ID enrolled on submission) } — note GoHighLevel has no lists and email campaigns are managed inside GoHighLevel, not via ThinCMS campaigns."),
     },
     async (params) => {
       const result = await client.post("/integrations", params);
