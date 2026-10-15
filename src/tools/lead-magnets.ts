@@ -81,4 +81,18 @@ export function registerLeadMagnetTools(server: McpServer, client: ThinCMSClient
       return formatResult(result);
     }
   );
+
+  siteAwareTool(server, client, 
+    "thincms_check_lead_magnet_download",
+    "Check that a lead magnet's signed download link actually delivers the file, without needing a subscriber session. Resolves a fresh signed download through the same code path as the public download route and reports status (200/403/404), error, expected vs actual file size, and a short-lived downloadUrl. Omit id to check every lead magnet on the site.",
+    {
+      id: z.string().optional().describe("Lead magnet ID. Omit to check all lead magnets."),
+    },
+    async (params) => {
+      const result = params.id
+        ? await client.get(`/lead-magnets/${params.id}/download-check`)
+        : await client.get("/lead-magnets/download-check");
+      return formatResult(result);
+    }
+  );
 }
