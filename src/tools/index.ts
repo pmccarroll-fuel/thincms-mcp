@@ -38,6 +38,7 @@ import { registerIntegrationTools } from "./integrations.js";
 import { registerCampaignTools } from "./campaigns.js";
 import { registerSequenceTools } from "./sequences.js";
 import { registerReviewTools } from "./reviews.js";
+import { registerChatTools } from "./chat.js";
 import { registerToolTools } from "./tools.js";
 import { registerVersionTools } from "./versions.js";
 import { registerReleaseTools } from "./releases.js";
@@ -98,6 +99,7 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   registerCampaignTools(server, client);
   registerSequenceTools(server, client);
   registerReviewTools(server, client);
+  registerChatTools(server, client);
   registerToolTools(server, client);
   registerVersionTools(server, client);
   registerReleaseTools(server, client);
