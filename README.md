@@ -82,6 +82,13 @@ Same configuration in `.claude/settings.json` or global Claude Code settings.
 
 All tool names are prefixed with `thincms_` (e.g., `thincms_list_posts`).
 
+## Releases and version history
+
+- **Version history** is automatic: every change to pages, posts, the template, navigation, content blocks and collections is recorded. `thincms_list_versions`, `thincms_diff_version` and `thincms_restore_version` roll back any item; `thincms_list_deleted` finds deleted ones.
+- **Releases** are optional. Create one with `thincms_create_release`, then pass its id as `releaseId` to the normal write tools to stage changes privately. Share `thincms_get_release_preview_link` for review, then `thincms_publish_release` or `thincms_schedule_release`. Without `releaseId`, writes go live as usual.
+
+See `thincms-mcp.md` in the ThinCMS repo for the full workflow.
+
 ## Permissions
 
 **Hosted:** each user's MCP level per site (read-only / editor / admin), capped by their normal site role and checked live on every call.
