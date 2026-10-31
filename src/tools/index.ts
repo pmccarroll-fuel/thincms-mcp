@@ -39,6 +39,8 @@ import { registerCampaignTools } from "./campaigns.js";
 import { registerSequenceTools } from "./sequences.js";
 import { registerReviewTools } from "./reviews.js";
 import { registerToolTools } from "./tools.js";
+import { registerVersionTools } from "./versions.js";
+import { registerReleaseTools } from "./releases.js";
 import { registerUploadTools } from "./uploads.js";
 
 export function registerAllTools(server: McpServer, client: ThinCMSClient) {
@@ -97,6 +99,8 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   registerSequenceTools(server, client);
   registerReviewTools(server, client);
   registerToolTools(server, client);
+  registerVersionTools(server, client);
+  registerReleaseTools(server, client);
   registerSnapshotTools(server, client);  // Snapshot/restore safety tools
   registerCapabilitiesTool(server, client);  // Last — reads the populated registry
 }

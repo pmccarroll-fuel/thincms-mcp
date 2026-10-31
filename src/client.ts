@@ -134,8 +134,11 @@ export class ThinCMSClient {
   // would write to a production site (see isProductionSite) without an
   // explicit confirmProductionWrite acknowledgement; null when the call is
   // allowed to proceed.
-  checkProductionWrite(): ApiResult | null {
+  checkProductionWrite(path?: string): ApiResult | null {
     const override = getCurrentOverride();
+    // Staging into a release, and release bookkeeping, change nothing live.
+    // Publishing / scheduling a release still needs confirmation.
+    if (override?.releaseId || (path && isNonLiveReleasePath(path))) return null;
     const targetSiteId = override?.siteId ?? this.siteId;
     if (!this.isProductionSite(targetSiteId)) return null;
     if (override?.confirmProductionWrite === true) return null;
@@ -212,6 +215,13 @@ export class ThinCMSClient {
       }
     }
     return url.toString();
+  }
+
+  // Writes made inside a tool call with releaseId are staged into that release
+  // (the REST write routes accept ?releaseId=) instead of going live.
+  private writeUrl(path: string): string {
+    const releaseId = getCurrentOverride()?.releaseId;
+    return this.url(path, releaseId ? { releaseId } : undefined);
   }
 
   private async request(url: string, init: RequestInit): Promise<ApiResult> {
@@ -295,9 +305,9 @@ export class ThinCMSClient {
   }
 
   async post(path: string, body: any): Promise<ApiResult> {
-    const guard = this.checkProductionWrite();
+    const guard = this.checkProductionWrite(path);
     if (guard) return guard;
-    return this.request(this.url(path), {
+    return this.request(this.writeUrl(path), {
       method: "POST",
       headers: { ...this.headers, "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -305,9 +315,9 @@ export class ThinCMSClient {
   }
 
   async put(path: string, body: any): Promise<ApiResult> {
-    const guard = this.checkProductionWrite();
+    const guard = this.checkProductionWrite(path);
     if (guard) return guard;
-    return this.request(this.url(path), {
+    return this.request(this.writeUrl(path), {
       method: "PUT",
       headers: { ...this.headers, "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -316,9 +326,9 @@ export class ThinCMSClient {
 
   // dryRun PATCHes write nothing, so they skip the production guard
   async patch(path: string, body: any): Promise<ApiResult> {
-    const guard = body?.dryRun === true ? null : this.checkProductionWrite();
+    const guard = body?.dryRun === true ? null : this.checkProductionWrite(path);
     if (guard) return guard;
-    return this.request(this.url(path), {
+    return this.request(this.writeUrl(path), {
       method: "PATCH",
       headers: { ...this.headers, "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -326,9 +336,9 @@ export class ThinCMSClient {
   }
 
   async delete(path: string): Promise<ApiResult> {
-    const guard = this.checkProductionWrite();
+    const guard = this.checkProductionWrite(path);
     if (guard) return guard;
-    return this.request(this.url(path), {
+    return this.request(this.writeUrl(path), {
       method: "DELETE",
       headers: this.headers,
     });
@@ -530,4 +540,9 @@ export function isPrivateAddress(address: string): boolean {
     v6.startsWith("fc") || v6.startsWith("fd") || // unique local
     v6.startsWith("fe8") || v6.startsWith("fe9") || v6.startsWith("fea") || v6.startsWith("feb") // link-local
   );
+}
+
+/** Release endpoints that don't change the live site (everything except publish/schedule). */
+export function isNonLiveReleasePath(path: string): boolean {
+  return /^\/releases(\/|$|\?)/.test(path) && !/\/(publish|schedule)(\?|$)/.test(path);
 }

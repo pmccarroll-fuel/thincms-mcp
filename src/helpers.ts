@@ -61,6 +61,8 @@ export type SiteOverride = {
   apiKey?: string;
   siteName: string;
   confirmProductionWrite?: boolean;
+  // Stage this call's writes into a release instead of writing live.
+  releaseId?: string;
 };
 const _overrideStore = new AsyncLocalStorage<SiteOverride>();
 
@@ -158,6 +160,22 @@ const SITE_OVERRIDE_FIELD = z.string().optional().describe(
   "Override the active site for this single call — a site ID or site name (case-insensitive). Pass to target a specific tenant without mutating shared active-site state — the right pattern when running concurrent agent sessions managing different tenants. Must be one of the sites from thincms_list_sites. When omitted, the call uses the active site set by thincms_switch_site."
 );
 
+// Content write tools that can stage into a release instead of writing live.
+export const RELEASE_STAGEABLE_TOOLS = new Set([
+  "thincms_create_page", "thincms_update_page", "thincms_delete_page", "thincms_patch_page",
+  "thincms_create_post", "thincms_update_post", "thincms_delete_post",
+  "thincms_update_template", "thincms_patch_css", "thincms_patch_template",
+  "thincms_update_navigation",
+  "thincms_create_content_block", "thincms_update_content_block", "thincms_delete_content_block",
+  "thincms_create_collection", "thincms_update_collection", "thincms_delete_collection",
+  "thincms_create_collection_item", "thincms_update_collection_item", "thincms_delete_collection_item",
+  "thincms_reorder_collection_items",
+]);
+
+const RELEASE_ID_FIELD = z.string().optional().describe(
+  "Optional. Stage this change into a release (from thincms_create_release) instead of publishing it live. The live site is untouched until the release is published; preview it with thincms_get_release_preview_link. Omit to write live immediately, as normal."
+);
+
 const CONFIRM_PRODUCTION_WRITE_FIELD = z.boolean().optional().describe(
   "Acknowledge that this call may write to a production site: one listed in THINCMS_PRODUCTION_SITE_IDS or, on the hosted server, any site whose status is live. Required for any write against a production site (dry runs excepted); ignored otherwise. The error message names the site and recommends thincms_snapshot before any production write."
 );
@@ -174,9 +192,15 @@ export function siteAwareTool<S extends z.ZodRawShape>(
     ...schema,
     siteId: SITE_OVERRIDE_FIELD,
     confirmProductionWrite: CONFIRM_PRODUCTION_WRITE_FIELD,
+    ...(RELEASE_STAGEABLE_TOOLS.has(name) ? { releaseId: RELEASE_ID_FIELD } : {}),
   };
   (server as any).tool(name, description, augmented, async (params: any) => {
+    const stageable = RELEASE_STAGEABLE_TOOLS.has(name);
     const { siteId, confirmProductionWrite, ...rest } = params;
+    // For stageable tools releaseId is routing, not a tool input; other tools
+    // (e.g. thincms_stage_release_item) keep it as a normal parameter.
+    const releaseId: string | undefined = stageable ? rest.releaseId : undefined;
+    if (stageable) delete rest.releaseId;
     // Resolve target siteId: explicit param > active site
     const targetSiteId = siteId ?? client.getActiveSite().siteId;
     let siteName: string | undefined;
@@ -206,7 +230,7 @@ export function siteAwareTool<S extends z.ZodRawShape>(
       apiKey = profile?.apiKey;
     }
     return runWithOverride(
-      { siteId: resolvedSiteId, apiKey, siteName: siteName!, confirmProductionWrite },
+      { siteId: resolvedSiteId, apiKey, siteName: siteName!, confirmProductionWrite, releaseId },
       () => handler(rest),
     );
   });

@@ -105,7 +105,7 @@ export function registerTemplateTools(server: McpServer, client: ThinCMSClient) 
       }
 
       const result = await client.put("/template", body);
-      if (!result.ok) return formatResult(result);
+      if (!result.ok || (result.data as any)?.staged) return formatResult(result);
       // Server echoes the full template back (potentially many KB). Return a
       // summary instead — agents that need the full content can call
       // thincms_get_template or thincms_template_status separately.
