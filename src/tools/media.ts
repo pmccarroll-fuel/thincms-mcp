@@ -36,21 +36,22 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_upload_media",
-    "Upload an image or file to the media library. Provide exactly one source: filePath (local file), url (download from URL), or base64 (encoded content with filename). For images, optimized WebP variants (thumbnail 400px, medium 800px, large 1200px) are automatically generated and returned in the `variants` field.",
+    "Upload an image or file to the media library. Provide exactly one source: filePath (local file, stdio server only), uploadId (staged upload from thincms_prepare_upload — use this for local files on the hosted server), url (download from URL), or base64 (encoded content with filename; small files only). For images, optimized WebP variants (thumbnail 400px, medium 800px, large 1200px) are automatically generated and returned in the `variants` field.",
     {
       filePath: z.string().optional().describe("Absolute path to a local file (local stdio server only; not available on the hosted server)"),
       url: z.string().optional().describe("URL to download and upload"),
-      base64: z.string().optional().describe("Base64-encoded file content"),
+      base64: z.string().optional().describe("Base64-encoded file content (small files only — the bytes pass through the model)"),
+      uploadId: z.string().optional().describe("ID of a staged upload from thincms_prepare_upload, after PUTting the file to its uploadUrl. The way to upload local files on the hosted server; the response includes the file's sha256. Single use."),
       filename: z.string().optional().describe("Filename (required for base64, optional otherwise)"),
       altText: z.string().optional().describe("Alt text for accessibility"),
       caption: z.string().optional().describe("Image caption"),
       visibility: z.enum(["public", "private"]).optional().describe("Visibility (default: public)"),
     },
     async (params) => {
-      const sources = [params.filePath, params.url, params.base64].filter(Boolean);
+      const sources = [params.filePath, params.url, params.base64, params.uploadId].filter(Boolean);
       if (sources.length !== 1) {
         return {
-          content: [{ type: "text" as const, text: "Error: provide exactly one of filePath, url, or base64" }],
+          content: [{ type: "text" as const, text: "Error: provide exactly one of filePath, url, base64, or uploadId" }],
           isError: true,
         };
       }
@@ -64,6 +65,7 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
         filePath: params.filePath,
         url: params.url,
         base64: params.base64,
+        uploadId: params.uploadId,
         filename: params.filename,
         fields,
       });

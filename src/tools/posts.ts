@@ -1,8 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult, stripContentFromList, summarizeContentResponse, siteAwareTool } from "../helpers.js";
+import { formatResult, stripContentFromList, summarizeContentResponse, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY, checkExpectedHash, metadataOnly, EXPECTED_SHA_FIELD, METADATA_ONLY_FIELD } from "../helpers.js";
 import { scheduledForSchema } from "../validation.js";
 
 export function registerPostTools(server: McpServer, client: ThinCMSClient) {
@@ -45,23 +44,26 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_get_post",
-    "Get a single blog post by ID, including full HTML content, author, categories, and tags.",
+    "Get a single blog post by ID, including full HTML content, author, categories, and tags. Pass metadataOnly=true to get bytes/sha256 of content and membersContent instead of the HTML.",
     {
       id: z.string().describe("Post ID"),
+      metadataOnly: METADATA_ONLY_FIELD,
     },
     async (params) => {
       const result = await client.get(`/posts/${params.id}`);
+      if (result.ok && params.metadataOnly) result.data = metadataOnly(result.data, ["content", "membersContent"]);
       return formatResult(result);
     }
   );
 
   siteAwareTool(server, client, 
     "thincms_create_post",
-    'Create a blog post. Content should be raw HTML. Tags are auto-created if they don\'t exist. For large content (>10KB), use contentFile instead of content. Posts with status="published" and a publishedAt in the past appear on the public site immediately; a future publishedAt is auto-scheduling — they appear when the timestamp passes (no worker required, the public site filters by date). Posts with status="draft" never appear publicly regardless of dates. Use scheduledFor="immediate" to publish now, or scheduledFor=<ISO timestamp at least 60 min in the future> to schedule.',
+    'Create a blog post. Content should be raw HTML. Tags are auto-created if they don\'t exist. For large content (>10KB), use contentFile (local) or contentUploadId (hosted; see thincms_prepare_upload) instead of content. Posts with status="published" and a publishedAt in the past appear on the public site immediately; a future publishedAt is auto-scheduling — they appear when the timestamp passes (no worker required, the public site filters by date). Posts with status="draft" never appear publicly regardless of dates. Use scheduledFor="immediate" to publish now, or scheduledFor=<ISO timestamp at least 60 min in the future> to schedule.',
     {
       title: z.string().describe("Post title (required)"),
       content: z.string().optional().describe("HTML content of the post"),
-      contentFile: z.string().optional().describe("Local file path containing HTML content — use this instead of content for large posts (>10KB). The file is read and sent as content."),
+      contentFile: z.string().optional().describe("Local file path containing HTML content — use this instead of content for large posts (>10KB). The file is read and sent as content." + LOCAL_ONLY),
+      contentUploadId: uploadIdField("the HTML content"),
       excerpt: z.string().optional().describe("Short summary/excerpt"),
       slug: z.string().optional().describe("URL slug (auto-generated from title if omitted)"),
       authorId: z.string().optional().describe("Author ID"),
@@ -88,14 +90,10 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
       membersContent: z.string().optional().describe("HTML content visible only to authenticated members/subscribers. Shown after the main content for logged-in members."),
     },
     async (params) => {
-      const { contentFile, ...body } = params;
-      if (contentFile) {
-        try {
-          body.content = await readFile(contentFile, "utf-8");
-        } catch (err: any) {
-          return formatResult({ ok: false, status: 0, data: { error: `Failed to read file: ${err.message}` } });
-        }
-      }
+      const { contentFile, contentUploadId, ...body } = params;
+      const resolved = await resolveContentInput(client, { inline: (body as any).content, file: contentFile, uploadId: contentUploadId }, { inline: "content", file: "contentFile", upload: "contentUploadId" });
+      if (!resolved.ok) return formatResult(resolved.error);
+      (body as any).content = resolved.value;
       const result = await client.post("/posts", body);
       if (result.ok) result.data = summarizeContentResponse(result.data);
       return formatResult(result);
@@ -104,12 +102,14 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_update_post",
-    "Update an existing blog post. Only provided fields are changed (partial update). Content should be raw HTML. For large content (>10KB), use contentFile instead of content. Changing slug auto-creates a 301 redirect from the old URL.",
+    "Update an existing blog post. Only provided fields are changed (partial update). Content should be raw HTML. For large content (>10KB), use contentFile (local) or contentUploadId (hosted; see thincms_prepare_upload) instead of content. Changing slug auto-creates a 301 redirect from the old URL.",
     {
       id: z.string().describe("Post ID (required)"),
       title: z.string().optional().describe("Post title"),
       content: z.string().optional().describe("HTML content"),
-      contentFile: z.string().optional().describe("Local file path containing HTML content — use this instead of content for large posts (>10KB)."),
+      contentFile: z.string().optional().describe("Local file path containing HTML content — use this instead of content for large posts (>10KB)." + LOCAL_ONLY),
+      contentUploadId: uploadIdField("the HTML content"),
+      expectedSha256: EXPECTED_SHA_FIELD("content"),
       excerpt: z.string().optional().describe("Short summary/excerpt"),
       slug: z.string().optional().describe("URL slug (changing slug auto-creates a 301 redirect)"),
       authorId: z.string().optional().describe("Author ID"),
@@ -136,14 +136,16 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
       membersContent: z.string().optional().describe("HTML content visible only to authenticated members/subscribers."),
     },
     async (params) => {
-      const { id, contentFile, ...body } = params;
-      if (contentFile) {
-        try {
-          body.content = await readFile(contentFile, "utf-8");
-        } catch (err: any) {
-          return formatResult({ ok: false, status: 0, data: { error: `Failed to read file: ${err.message}` } });
-        }
+      const { id, contentFile, contentUploadId, expectedSha256, ...body } = params;
+      if (expectedSha256) {
+        const current = await client.get(`/posts/${id}`);
+        if (!current.ok) return formatResult(current);
+        const conflict = checkExpectedHash(current.data?.content, expectedSha256, "content");
+        if (conflict) return formatResult(conflict);
       }
+      const resolved = await resolveContentInput(client, { inline: (body as any).content, file: contentFile, uploadId: contentUploadId }, { inline: "content", file: "contentFile", upload: "contentUploadId" });
+      if (!resolved.ok) return formatResult(resolved.error);
+      (body as any).content = resolved.value;
       const result = await client.put(`/posts/${id}`, body);
       if (result.ok) result.data = summarizeContentResponse(result.data);
       return formatResult(result);

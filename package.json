@@ -1,7 +1,7 @@
 {
   "name": "thincms-mcp",
-  "version": "2.2.0",
-  "description": "MCP server for ThinCMS \u2014 AI agent access to CMS content management",
+  "version": "2.3.0",
+  "description": "MCP server for ThinCMS — AI agent access to CMS content management",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

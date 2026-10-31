@@ -60,8 +60,11 @@ export class ThinCMSClient {
     );
   }
 
+  // Production = listed in THINCMS_PRODUCTION_SITE_IDS, or (hosted mode)
+  // reported live by ThinCMS (Site.siteStatus === "live").
   isProductionSite(siteId: string): boolean {
-    return this.productionSiteIds.has(siteId);
+    if (this.productionSiteIds.has(siteId)) return true;
+    return this.sites.some((s) => s.siteId === siteId && s.siteStatus === "live");
   }
 
   getProductionSiteIds(): string[] {
@@ -121,30 +124,78 @@ export class ThinCMSClient {
       return {
         ok: false,
         status: 0,
-        data: { error: "filePath is not available on the hosted MCP server. Provide url or base64 (with filename) instead." },
+        data: { error: "File paths aren't available on the hosted server. Use thincms_prepare_upload and pass uploadId instead (or provide url or base64 with filename)." },
       };
     }
     return null;
   }
 
   // Production-site write guard. Returns an error ApiResult when the call
-  // would write to a site listed in THINCMS_PRODUCTION_SITE_IDS without an
+  // would write to a production site (see isProductionSite) without an
   // explicit confirmProductionWrite acknowledgement; null when the call is
   // allowed to proceed.
-  private checkProductionWrite(): ApiResult | null {
+  checkProductionWrite(): ApiResult | null {
     const override = getCurrentOverride();
     const targetSiteId = override?.siteId ?? this.siteId;
-    if (!this.productionSiteIds.has(targetSiteId)) return null;
+    if (!this.isProductionSite(targetSiteId)) return null;
     if (override?.confirmProductionWrite === true) return null;
     const profile = this.sites.find((s) => s.siteId === targetSiteId);
     const label = profile ? `${profile.name} [${targetSiteId}]` : targetSiteId;
+    const reason = this.productionSiteIds.has(targetSiteId)
+      ? "it is in THINCMS_PRODUCTION_SITE_IDS"
+      : "the site is live";
     return {
       ok: false,
       status: 403,
       data: {
-        error: `Refusing to write to production site ${label} — it is in THINCMS_PRODUCTION_SITE_IDS. Take a snapshot first (thincms_snapshot) so the write is reversible, then re-call with confirmProductionWrite: true to acknowledge.`,
+        error: `Refusing to write to production site ${label} — ${reason}. Take a snapshot first (thincms_snapshot) so the write is reversible, then re-call with confirmProductionWrite: true to acknowledge.`,
       },
     };
+  }
+
+  // Staged uploads. Preparing a slot and consuming it don't change site
+  // content, so they skip the production guard; the write that uses the
+  // upload is guarded as usual.
+  async prepareUpload(body: {
+    filename: string;
+    contentType: string;
+    bytes?: number;
+    sha256?: string;
+  }): Promise<ApiResult> {
+    return this.request(this.url("/uploads"), {
+      method: "POST",
+      headers: { ...this.headers, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** Claim a staged upload (single use) and return its bytes. */
+  async consumeUpload(
+    uploadId: string,
+  ): Promise<
+    | { ok: true; bytes: ArrayBuffer; filename: string; contentType: string; sha256: string }
+    | { ok: false; result: ApiResult }
+  > {
+    try {
+      const res = await fetch(this.url(`/uploads/${encodeURIComponent(uploadId)}/consume`), {
+        method: "POST",
+        headers: this.headers,
+      });
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type") || "";
+        const data = contentType.includes("application/json") ? await res.json() : await res.text();
+        return { ok: false, result: { ok: false, status: res.status, data } };
+      }
+      return {
+        ok: true,
+        bytes: await res.arrayBuffer(),
+        filename: decodeURIComponent(res.headers.get("x-upload-filename") || "upload"),
+        contentType: res.headers.get("content-type") || "application/octet-stream",
+        sha256: res.headers.get("x-upload-sha256") || "",
+      };
+    } catch (err: any) {
+      return { ok: false, result: { ok: false, status: 0, data: { error: `Network error: ${err.message}` } } };
+    }
   }
 
   private url(path: string, params?: Record<string, string>): string {
@@ -270,16 +321,27 @@ export class ThinCMSClient {
       filePath?: string;
       url?: string;
       base64?: string;
+      uploadId?: string;
       filename?: string;
       fields?: Record<string, string | undefined>;
     }
   ): Promise<ApiResult> {
     const localPathError = this.rejectLocalPath(options.filePath);
     if (localPathError) return localPathError;
+    // Check before consuming, so a refused write doesn't burn the upload
+    const earlyGuard = this.checkProductionWrite();
+    if (earlyGuard) return earlyGuard;
 
     const formData = new FormData();
+    let uploadSha256: string | undefined;
 
-    if (options.filePath) {
+    if (options.uploadId) {
+      const upload = await this.consumeUpload(options.uploadId);
+      if (!upload.ok) return upload.result;
+      uploadSha256 = upload.sha256;
+      const blob = new Blob([upload.bytes], { type: upload.contentType });
+      formData.append("file", blob, options.filename || upload.filename);
+    } else if (options.filePath) {
       const buffer = await readFile(options.filePath);
       const name = options.filename || basename(options.filePath);
       const blob = new Blob([buffer]);
@@ -318,7 +380,7 @@ export class ThinCMSClient {
       return {
         ok: false,
         status: 0,
-        data: { error: "Provide one of: filePath, url, or base64" },
+        data: { error: "Provide one of: filePath, url, base64, or uploadId" },
       };
     }
 
@@ -330,13 +392,17 @@ export class ThinCMSClient {
       }
     }
 
-    const guard = this.checkProductionWrite();
-    if (guard) return guard;
-    return this.request(this.url(path), {
+    const result = await this.request(this.url(path), {
       method: "POST",
       headers: this.headers,
       body: formData,
     });
+    // Echo the hash of the staged bytes so the agent can match it against
+    // `shasum -a 256` of the local file.
+    if (result.ok && uploadSha256 && result.data && typeof result.data === "object") {
+      result.data = { ...result.data, sha256: uploadSha256 };
+    }
+    return result;
   }
 
   async uploadFileReplace(

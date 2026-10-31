@@ -7,6 +7,8 @@ export interface SiteProfile {
   // Hosted mode only: the user's effective MCP role on this site.
   role?: string;
   domain?: string;
+  // Hosted mode only: "live" sites are treated as production (write guard).
+  siteStatus?: string;
 }
 
 export interface ThinCMSConfig {

@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -210,12 +212,21 @@ export function siteAwareTool<S extends z.ZodRawShape>(
   });
 }
 
+// Size + full sha256 of a content field. The hash is over the UTF-8 bytes, so
+// it matches `shasum -a 256` of a local file holding the same content.
+export function contentStats(value: string) {
+  return {
+    bytes: Buffer.byteLength(value, "utf-8"),
+    lines: value.split("\n").length,
+    sha256: createHash("sha256").update(value, "utf-8").digest("hex"),
+  };
+}
+
 // Replace heavyweight HTML fields with size summaries so the response stays
 // under the agent's token budget. Used by update_page / update_post / etc.
 function fieldStats(value: string | null | undefined) {
   if (value == null) return null;
-  const bytes = Buffer.byteLength(value, "utf-8");
-  return { bytes, lines: value.split("\n").length };
+  return contentStats(value);
 }
 
 export function summarizeContentResponse<T extends Record<string, any>>(
@@ -233,3 +244,100 @@ export function summarizeContentResponse<T extends Record<string, any>>(
   }
   return out;
 }
+
+// Resolve one text field that can arrive three ways: inline, a local file
+// (stdio only), or a staged upload ID (thincms_prepare_upload). At most one
+// may be given; value is undefined when none is. Hosted mode refuses file
+// paths before touching the filesystem — the paths would otherwise be read
+// from the MCP server's own disk.
+export type ContentInput = { inline?: string; file?: string; uploadId?: string };
+export type ContentNames = { inline: string; file: string; upload: string };
+
+export async function resolveContentInput(
+  client: ThinCMSClient,
+  input: ContentInput,
+  names: ContentNames,
+): Promise<{ ok: true; value: string | undefined } | { ok: false; error: ApiResult }> {
+  const fail = (error: string, status = 0) => ({ ok: false as const, error: { ok: false, status, data: { error } } });
+  const given = [
+    input.inline !== undefined && names.inline,
+    input.file !== undefined && names.file,
+    input.uploadId !== undefined && names.upload,
+  ].filter(Boolean);
+  if (given.length > 1) return fail(`Provide only one of ${given.join(", ")}`);
+
+  if (input.file !== undefined) {
+    if (client.isRemote()) {
+      return fail(`File paths aren't available on the hosted server. Use thincms_prepare_upload and pass ${names.upload} instead.`);
+    }
+    try {
+      return { ok: true, value: await readFile(input.file, "utf-8") };
+    } catch (err: any) {
+      return fail(`Failed to read ${names.file}: ${err.message}`);
+    }
+  }
+
+  if (input.uploadId !== undefined) {
+    // Uploads are single use: refuse a guarded write before consuming one
+    const guard = client.checkProductionWrite();
+    if (guard) return { ok: false, error: guard };
+    const upload = await client.consumeUpload(input.uploadId);
+    if (!upload.ok) return { ok: false, error: upload.result };
+    try {
+      // fatal: refuse non-UTF-8 rather than silently substituting characters;
+      // ignoreBOM: keep a BOM so the stored hash still matches the local file.
+      const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(upload.bytes);
+      return { ok: true, value: text };
+    } catch {
+      return fail(`${names.upload}: the uploaded file is not valid UTF-8 text`);
+    }
+  }
+
+  return { ok: true, value: input.inline };
+}
+
+// Description suffix for *File params, so hosted agents don't reach for them.
+export const LOCAL_ONLY = " (local stdio server only; on the hosted server use the matching *UploadId parameter)";
+
+export function uploadIdField(what: string) {
+  return z.string().optional().describe(
+    `ID of a staged upload containing ${what} — from thincms_prepare_upload after PUTting the file to its uploadUrl. Use for large content on the hosted server; the file bytes never pass through the model. Single use.`,
+  );
+}
+
+// Optimistic-concurrency check for update tools: refuse the write when the
+// stored field no longer hashes to what the agent last synced.
+export function checkExpectedHash(
+  current: string | null | undefined,
+  expectedSha256: string | undefined,
+  field: string,
+): ApiResult | null {
+  if (!expectedSha256) return null;
+  const currentSha256 = contentStats(current ?? "").sha256;
+  if (currentSha256 === expectedSha256.toLowerCase()) return null;
+  return {
+    ok: false,
+    status: 409,
+    data: {
+      error: `${field} has changed since your last sync (stored sha256 ${currentSha256}, expected ${expectedSha256}). Nothing was written. Re-read it, merge, and retry.`,
+      currentSha256,
+    },
+  };
+}
+
+// metadataOnly reads: replace each content field with its stats.
+export function metadataOnly(obj: Record<string, any>, fields: string[]): Record<string, any> {
+  const out: Record<string, any> = { ...obj };
+  for (const f of fields) {
+    if (typeof out[f] === "string") out[f] = contentStats(out[f]);
+  }
+  return out;
+}
+
+export const EXPECTED_SHA_FIELD = (field: string) => z.string().optional().describe(
+  `sha256 of the ${field} you last synced. When given, the write is refused (409, with currentSha256) if the stored ${field} no longer matches — protects edits made in the admin since your last sync.`,
+);
+
+export const METADATA_ONLY_FIELD = z.boolean().optional().describe(
+  "Return bytes, lines and sha256 for each content field instead of the content itself. Use to check local and live are in sync without pulling the content into context.",
+);

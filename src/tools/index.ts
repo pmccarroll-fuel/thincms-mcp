@@ -39,6 +39,7 @@ import { registerCampaignTools } from "./campaigns.js";
 import { registerSequenceTools } from "./sequences.js";
 import { registerReviewTools } from "./reviews.js";
 import { registerToolTools } from "./tools.js";
+import { registerUploadTools } from "./uploads.js";
 
 export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   // Wrap server.tool to record every registered name into the central
@@ -65,6 +66,7 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   registerAuthorTools(server, client);
   registerTagTools(server, client);
   registerMediaTools(server, client);
+  registerUploadTools(server, client);
   registerTemplateTools(server, client);
   registerNavigationTools(server, client);
   registerSettingsTools(server, client);

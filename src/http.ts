@@ -49,7 +49,7 @@ interface MeResponse {
   user: { id: string; email: string; name: string | null };
   clientId: string;
   tokenExpiresAt: number;
-  sites: Array<{ siteId: string; name: string; domain: string; role: string }>;
+  sites: Array<{ siteId: string; name: string; domain: string; role: string; siteStatus?: string }>;
 }
 
 const tokenCache = new Map<string, { me: MeResponse; until: number }>();
@@ -92,7 +92,7 @@ const verifier = {
 };
 
 function sitesFrom(me: MeResponse): SiteProfile[] {
-  return me.sites.map((s) => ({ name: s.name, siteId: s.siteId, domain: s.domain, role: s.role }));
+  return me.sites.map((s) => ({ name: s.name, siteId: s.siteId, domain: s.domain, role: s.role, siteStatus: s.siteStatus }));
 }
 
 // ── Sessions ──

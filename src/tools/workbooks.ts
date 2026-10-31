@@ -1,34 +1,42 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult, siteAwareTool } from "../helpers.js";
+import { formatResult, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY } from "../helpers.js";
 
 const fieldsArraySchema = z.array(z.record(z.any())).describe(
   "Ordered array of field definitions. Each field is an object with at minimum { fieldId, type, label }. v1 field types: short_text, long_text, number, rating, select, multi_select, date, prompt_display, markdown_display. Input fields may include `prefillFrom: { courseSlug, workbookSlug, fieldId }` for cross-workbook references.",
 );
 
 async function resolveFields(
+  client: ThinCMSClient,
   fields: unknown,
   fieldsFile: string | undefined,
+  fieldsUploadId: string | undefined,
 ): Promise<{ ok: true; fields: any[] } | { ok: false; error: string }> {
-  if (fieldsFile) {
+  if (fieldsFile !== undefined || fieldsUploadId !== undefined) {
+    if (fields !== undefined) return { ok: false, error: "Provide only one of fields, fieldsFile, fieldsUploadId" };
+    const resolved = await resolveContentInput(
+      client,
+      { file: fieldsFile, uploadId: fieldsUploadId },
+      { inline: "fields", file: "fieldsFile", upload: "fieldsUploadId" },
+    );
+    if (!resolved.ok) return { ok: false, error: resolved.error.data?.error ?? JSON.stringify(resolved.error.data) };
     try {
-      const raw = await readFile(fieldsFile, "utf-8");
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(resolved.value ?? "");
       if (!Array.isArray(parsed)) {
-        return { ok: false, error: "fieldsFile must contain a JSON array" };
+        return { ok: false, error: "The fields file must contain a JSON array" };
       }
       return { ok: true, fields: parsed };
     } catch (err: any) {
-      return { ok: false, error: `Failed to read fieldsFile: ${err.message}` };
+      return { ok: false, error: `The fields file is not valid JSON: ${err.message}` };
     }
   }
   if (Array.isArray(fields)) {
     return { ok: true, fields };
   }
-  return { ok: false, error: "Either `fields` (array) or `fieldsFile` (path to JSON array) is required" };
+  return { ok: false, error: "Either `fields` (array), `fieldsFile` (path to JSON array) or `fieldsUploadId` is required" };
 }
 
 export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) {
@@ -44,7 +52,8 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
       description: z.string().optional().describe("HTML content shown above the form"),
       introContent: z.string().optional().describe("Optional additional HTML intro shown after the description"),
       fields: fieldsArraySchema.optional(),
-      fieldsFile: z.string().optional().describe("Local file path containing a JSON array of field definitions — use for large workbook specs"),
+      fieldsFile: z.string().optional().describe("Local file path containing a JSON array of field definitions — use for large workbook specs" + LOCAL_ONLY),
+      fieldsUploadId: uploadIdField("a JSON array of field definitions"),
       requiredForCompletion: z.boolean().optional().describe("Whether marking the workbook complete is required for module completion (default: true)"),
       allowExportBeforeComplete: z.boolean().optional().describe("Whether learners can export before marking complete (default: true)"),
       isFree: z.boolean().optional().describe("Make this workbook a free preview (default: false)"),
@@ -52,8 +61,8 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
       dripDate: z.string().optional().describe("ISO date when this workbook becomes available (scheduled drip mode)"),
     },
     async (params) => {
-      const { fieldsFile, fields, ...rest } = params;
-      const resolved = await resolveFields(fields, fieldsFile);
+      const { fieldsFile, fieldsUploadId, fields, ...rest } = params;
+      const resolved = await resolveFields(client, fields, fieldsFile, fieldsUploadId);
       if (!resolved.ok) {
         return formatResult({ ok: false, status: 0, data: { error: resolved.error } });
       }
@@ -88,7 +97,8 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
       description: z.string().optional().describe("HTML content shown above the form"),
       introContent: z.string().optional().describe("Optional additional HTML intro"),
       fields: fieldsArraySchema.optional(),
-      fieldsFile: z.string().optional().describe("Local file path containing a JSON array of field definitions"),
+      fieldsFile: z.string().optional().describe("Local file path containing a JSON array of field definitions" + LOCAL_ONLY),
+      fieldsUploadId: uploadIdField("a JSON array of field definitions"),
       requiredForCompletion: z.boolean().optional(),
       allowExportBeforeComplete: z.boolean().optional(),
       sortOrder: z.number().int().optional().describe("Position within the module (shared with lessons and quizzes)"),
@@ -97,10 +107,10 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
       dripDate: z.string().optional(),
     },
     async (params) => {
-      const { id, fieldsFile, fields, ...rest } = params;
+      const { id, fieldsFile, fieldsUploadId, fields, ...rest } = params;
       const body: Record<string, any> = { ...rest };
-      if (fieldsFile || fields !== undefined) {
-        const resolved = await resolveFields(fields, fieldsFile);
+      if (fieldsFile !== undefined || fieldsUploadId !== undefined || fields !== undefined) {
+        const resolved = await resolveFields(client, fields, fieldsFile, fieldsUploadId);
         if (!resolved.ok) {
           return formatResult({ ok: false, status: 0, data: { error: resolved.error } });
         }

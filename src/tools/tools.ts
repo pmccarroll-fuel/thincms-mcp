@@ -1,8 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult, siteAwareTool } from "../helpers.js";
+import { formatResult, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY } from "../helpers.js";
 
 const AUTH_REQUIRED = z.enum(["none", "password", "google", "either"]);
 const TOOL_STATUS = z.enum(["draft", "published", "archived"]);
@@ -40,13 +39,14 @@ export function registerToolTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client,
     "thincms_create_tool",
-    "Create a new Tool. `html` is the raw HTML/JS payload that renders inside a sandboxed iframe with a `window.thinCMS` runtime injected. Set authRequired to 'password' | 'google' | 'either' to gate access; 'none' makes the tool public. Set systemPrompt to prepend a persona to /ai/chat calls. For large HTML payloads (>10KB), use htmlFile with a local file path.",
+    "Create a new Tool. `html` is the raw HTML/JS payload that renders inside a sandboxed iframe with a `window.thinCMS` runtime injected. Set authRequired to 'password' | 'google' | 'either' to gate access; 'none' makes the tool public. Set systemPrompt to prepend a persona to /ai/chat calls. For large HTML payloads (>10KB), use htmlFile (local) or htmlUploadId (hosted; see thincms_prepare_upload).",
     {
       name: z.string().describe("Tool name (required)"),
       slug: z.string().optional().describe("URL slug (auto-generated from name if omitted)"),
       description: z.string().optional().describe("Short description shown in admin UI"),
       html: z.string().optional().describe("Raw HTML/JS payload"),
-      htmlFile: z.string().optional().describe("Local file path containing the HTML payload — use instead of html for large tools"),
+      htmlFile: z.string().optional().describe("Local file path containing the HTML payload — use instead of html for large tools" + LOCAL_ONLY),
+      htmlUploadId: uploadIdField("the HTML payload"),
       authRequired: AUTH_REQUIRED.optional().describe("Auth mode (default: none)"),
       allowSignup: z.boolean().optional().describe("Whether the login screen offers self-signup (default: true)"),
       systemPrompt: z.string().optional().describe("Default system prompt prepended to ai/chat calls"),
@@ -56,28 +56,25 @@ export function registerToolTools(server: McpServer, client: ThinCMSClient) {
       status: TOOL_STATUS.optional().describe("Publish status (default: draft)"),
     },
     async (params) => {
-      const { htmlFile, ...body } = params;
-      if (htmlFile) {
-        try {
-          body.html = await readFile(htmlFile, "utf-8");
-        } catch (err: any) {
-          return formatResult({ ok: false, status: 0, data: { error: `Failed to read file: ${err.message}` } });
-        }
-      }
+      const { htmlFile, htmlUploadId, ...body } = params;
+      const resolved = await resolveContentInput(client, { inline: (body as any).html, file: htmlFile, uploadId: htmlUploadId }, { inline: "html", file: "htmlFile", upload: "htmlUploadId" });
+      if (!resolved.ok) return formatResult(resolved.error);
+      (body as any).html = resolved.value;
       return formatResult(await client.post("/tools", body));
     },
   );
 
   siteAwareTool(server, client,
     "thincms_update_tool",
-    "Update an existing Tool. Only supplied fields change. For large HTML payloads (>10KB), use htmlFile instead of html.",
+    "Update an existing Tool. Only supplied fields change. For large HTML payloads (>10KB), use htmlFile (local) or htmlUploadId (hosted) instead of html.",
     {
       id: z.string().describe("Tool ID or slug (required)"),
       name: z.string().optional(),
       slug: z.string().optional().describe("URL slug"),
       description: z.string().optional(),
       html: z.string().optional().describe("Raw HTML/JS payload"),
-      htmlFile: z.string().optional().describe("Local file path containing the HTML payload — use instead of html for large tools"),
+      htmlFile: z.string().optional().describe("Local file path containing the HTML payload — use instead of html for large tools" + LOCAL_ONLY),
+      htmlUploadId: uploadIdField("the HTML payload"),
       authRequired: AUTH_REQUIRED.optional(),
       allowSignup: z.boolean().optional(),
       systemPrompt: z.string().optional(),
@@ -87,14 +84,10 @@ export function registerToolTools(server: McpServer, client: ThinCMSClient) {
       status: TOOL_STATUS.optional(),
     },
     async (params) => {
-      const { id, htmlFile, ...body } = params;
-      if (htmlFile) {
-        try {
-          body.html = await readFile(htmlFile, "utf-8");
-        } catch (err: any) {
-          return formatResult({ ok: false, status: 0, data: { error: `Failed to read file: ${err.message}` } });
-        }
-      }
+      const { id, htmlFile, htmlUploadId, ...body } = params;
+      const resolved = await resolveContentInput(client, { inline: (body as any).html, file: htmlFile, uploadId: htmlUploadId }, { inline: "html", file: "htmlFile", upload: "htmlUploadId" });
+      if (!resolved.ok) return formatResult(resolved.error);
+      (body as any).html = resolved.value;
       return formatResult(await client.put(`/tools/${encodeURIComponent(id)}`, body));
     },
   );
