@@ -3,7 +3,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY } from "../helpers.js";
+import { formatResult, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY, AS_DOWNLOAD_FIELD, downloadLinks } from "../helpers.js";
 
 const fieldsArraySchema = z.array(z.record(z.any())).describe(
   "Ordered array of field definitions. Each field is an object with at minimum { fieldId, type, label }. v1 field types: short_text, long_text, number, rating, select, multi_select, date, prompt_display, markdown_display. Input fields may include `prefillFrom: { courseSlug, workbookSlug, fieldId }` for cross-workbook references.",
@@ -195,9 +195,10 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
       userId: z.string().describe("Learner user ID (required)"),
       format: z.enum(["pdf", "markdown"]).describe("Output format"),
       outputPath: z.string().optional().describe("Local file path to write the export to. Required for PDF."),
+      asDownload: AS_DOWNLOAD_FIELD,
     },
     async (params) => {
-      if (params.format === "pdf" && !params.outputPath && !client.isRemote()) {
+      if (params.format === "pdf" && !params.outputPath && !params.asDownload && !client.isRemote()) {
         return formatResult({
           ok: false,
           status: 0,
@@ -209,6 +210,9 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
         { format: params.format },
       );
       if (!raw.ok) return formatResult(raw);
+      if (params.asDownload) {
+        return downloadLinks(client, [{ filename: raw.filename || `workbook-${params.workbookId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
+      }
       if (client.isRemote()) {
         return deliverRemote(raw, `workbook-${params.workbookId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`);
       }
@@ -235,9 +239,10 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
       userId: z.string().describe("Learner user ID (required)"),
       format: z.enum(["pdf", "markdown"]).describe("Output format"),
       outputPath: z.string().optional().describe("Local file path to write the export to. Required for PDF."),
+      asDownload: AS_DOWNLOAD_FIELD,
     },
     async (params) => {
-      if (params.format === "pdf" && !params.outputPath && !client.isRemote()) {
+      if (params.format === "pdf" && !params.outputPath && !params.asDownload && !client.isRemote()) {
         return formatResult({
           ok: false,
           status: 0,
@@ -249,6 +254,9 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
         { format: params.format },
       );
       if (!raw.ok) return formatResult(raw);
+      if (params.asDownload) {
+        return downloadLinks(client, [{ filename: raw.filename || `portfolio-${params.courseId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
+      }
       if (client.isRemote()) {
         return deliverRemote(raw, `portfolio-${params.courseId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`);
       }
@@ -273,10 +281,14 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
     {
       workbookId: z.string().describe("Workbook ID (required)"),
       outputPath: z.string().optional().describe("Local file path to write the CSV to"),
+      asDownload: AS_DOWNLOAD_FIELD,
     },
     async (params) => {
       const raw = await client.getRaw(`/workbooks/${params.workbookId}/responses/export`, { format: "csv" });
       if (!raw.ok) return formatResult(raw);
+      if (params.asDownload) {
+        return downloadLinks(client, [{ filename: raw.filename || `workbook-${params.workbookId}-responses.csv`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
+      }
       if (client.isRemote()) {
         return deliverRemote(raw, `workbook-${params.workbookId}-responses.csv`);
       }

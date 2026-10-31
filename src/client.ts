@@ -169,15 +169,19 @@ export class ThinCMSClient {
     });
   }
 
-  /** Claim a staged upload (single use) and return its bytes. */
+  /**
+   * Claim a staged upload (single use) and return its bytes. With peek, the
+   * bytes are returned but the upload stays usable (for dry runs).
+   */
   async consumeUpload(
     uploadId: string,
+    opts: { peek?: boolean } = {},
   ): Promise<
     | { ok: true; bytes: ArrayBuffer; filename: string; contentType: string; sha256: string }
     | { ok: false; result: ApiResult }
   > {
     try {
-      const res = await fetch(this.url(`/uploads/${encodeURIComponent(uploadId)}/consume`), {
+      const res = await fetch(this.url(`/uploads/${encodeURIComponent(uploadId)}/consume`, opts.peek ? { peek: "1" } : undefined), {
         method: "POST",
         headers: this.headers,
       });
@@ -228,6 +232,20 @@ export class ThinCMSClient {
         data: { error: `Network error: ${err.message}` },
       };
     }
+  }
+
+  /**
+   * Stage content as a single-use, 15-minute download link, so a large read
+   * lands in a file on the agent's machine instead of in the model's context.
+   * Not a site write, so no production guard.
+   */
+  async stageDownload(content: string | Uint8Array, filename: string, contentType: string): Promise<ApiResult> {
+    const body = typeof content === "string" ? Buffer.from(content, "utf-8") : Buffer.from(content);
+    return this.request(this.url("/downloads", { filename }), {
+      method: "POST",
+      headers: { ...this.headers, "Content-Type": contentType },
+      body,
+    });
   }
 
   async get(path: string, params?: Record<string, string>): Promise<ApiResult> {
@@ -296,8 +314,9 @@ export class ThinCMSClient {
     });
   }
 
+  // dryRun PATCHes write nothing, so they skip the production guard
   async patch(path: string, body: any): Promise<ApiResult> {
-    const guard = this.checkProductionWrite();
+    const guard = body?.dryRun === true ? null : this.checkProductionWrite();
     if (guard) return guard;
     return this.request(this.url(path), {
       method: "PATCH",

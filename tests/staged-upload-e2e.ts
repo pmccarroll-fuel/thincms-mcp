@@ -1,13 +1,15 @@
 /**
  * End-to-end test for staged uploads, content hashes, the hosted file-path
- * lockdown and the live-site write guard, against a running ThinCMS.
+ * lockdown, the live-site write guard, section patching, dry runs and
+ * download links, against a running ThinCMS.
  *
  *   THINCMS_E2E_URL=http://localhost:3001 npx tsx tests/staged-upload-e2e.ts
  *
  * "Hosted" here means remote: true with an API key — the same code paths the
- * hosted server runs, without needing an OAuth token. Creates a draft page
- * and a media item, and deletes both at the end. Re-pushes the existing
- * stylesheet unchanged.
+ * hosted server runs, without needing an OAuth token. Creates two draft pages
+ * and a media item and deletes them at the end. Temporarily edits the
+ * stylesheet and customHeadHtml, restoring both. Run against a scratch copy
+ * of a database, never production.
  */
 import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -167,10 +169,136 @@ await test("a live site refuses writes without confirmProductionWrite, without b
   assert(!ok.isError && ok.data._contentStats.sha256 === sha256("<p>guarded</p>"), ok.text);
 });
 
+console.log("\nSection patching (pages)");
+const sectioned = [
+  "<main>",
+  "<!-- START:hero -->",
+  "<h1>Old hero</h1>",
+  "<!-- END:hero -->",
+  "<!-- START:faq",
+  "     Questions block: keep in sync with the FAQ collection -->",
+  "<p>Old FAQ</p>",
+  "<!-- END:faq -->",
+  "</main>",
+].join("\n");
+let secPageId = "";
+await test("get_page sections lists both sections, including the multi-line marker", async () => {
+  const r = await call(hosted, "thincms_create_page", { title: "E2E sections", slug: `e2e-sections-${Date.now()}`, content: sectioned });
+  assert(!r.isError, r.text);
+  secPageId = r.data.id;
+  const s2 = await call(hosted, "thincms_get_page", { id: secPageId, sections: true });
+  assert(JSON.stringify(s2.data.sections.map((x: any) => x.name)) === '["hero","faq"]', s2.text);
+});
+
+await test("patch_page dryRun peeks an upload; the real patch then uses it", async () => {
+  const faq = Buffer.from("<p>New FAQ ✓</p>");
+  const { uploadId } = await stage(hosted, faq, "faq.html", "text/html");
+  const dry = await call(hosted, "thincms_patch_page", { id: secPageId, section: "faq", contentUploadId: uploadId, dryRun: true });
+  assert(!dry.isError && dry.data.dryRun === true, dry.text);
+  const real = await call(hosted, "thincms_patch_page", { id: secPageId, section: "faq", contentUploadId: uploadId });
+  assert(!real.isError, real.text);
+  const expected = sectioned.replace("<p>Old FAQ</p>", "<p>New FAQ ✓</p>");
+  const meta = await call(hosted, "thincms_get_page", { id: secPageId, metadataOnly: true });
+  assert(meta.data.content.sha256 === sha256(expected), "patched content differs from expected");
+});
+
+await test("patch_page auto-extracts matching markers and rejects others", async () => {
+  const ok = await call(hosted, "thincms_patch_page", { id: secPageId, section: "hero", content: "<!-- START:hero -->\n<h1>New hero</h1>\n<!-- END:hero -->" });
+  assert(!ok.isError, ok.text);
+  const bad = await call(hosted, "thincms_patch_page", { id: secPageId, section: "hero", content: "<!-- START:faq -->x<!-- END:faq -->" });
+  assert(bad.isError && /section is "hero"/.test(bad.text), bad.text);
+  const missing = await call(hosted, "thincms_patch_page", { id: secPageId, section: "nope", content: "x" });
+  assert(missing.isError && /Sections found: hero, faq/.test(missing.text), missing.text);
+});
+
+console.log("\nDry runs");
+await test("update_page dryRun reports the change, writes nothing, and leaves the upload usable", async () => {
+  const before = (await call(hosted, "thincms_get_page", { id: secPageId, metadataOnly: true })).data.content.sha256;
+  const next = Buffer.from("<main>replaced</main>");
+  const { uploadId } = await stage(hosted, next, "p.html", "text/html");
+  const dry = await call(hosted, "thincms_update_page", { id: secPageId, contentUploadId: uploadId, dryRun: true });
+  assert(!dry.isError && dry.data.content.before.sha256 === before && dry.data.content.after.sha256 === sha256(next), dry.text);
+  const after = (await call(hosted, "thincms_get_page", { id: secPageId, metadataOnly: true })).data.content.sha256;
+  assert(after === before, "dry run wrote to the page");
+  const real = await call(hosted, "thincms_update_page", { id: secPageId, contentUploadId: uploadId });
+  assert(!real.isError && real.data._contentStats.sha256 === sha256(next), real.text);
+});
+
+await test("a dry run on a live site needs no confirmProductionWrite", async () => {
+  assert(!(await call(hosted, "thincms_update_page", { id: secPageId, content: sectioned })).isError, "setup failed");
+  const dry = await call(liveSite, "thincms_patch_page", { id: secPageId, section: "hero", content: "<p>x</p>", dryRun: true });
+  assert(!dry.isError && dry.data.dryRun === true, dry.text);
+});
+
+console.log("\nTemplate sections");
+await test("patch_css patches a multi-line-marker section; patch_template patches customHeadHtml", async () => {
+  const tpl = await call(hosted, "thincms_get_template", {});
+  const original = { stylesheet: tpl.data.stylesheet, customHeadHtml: tpl.data.customHeadHtml };
+  try {
+    const css = original.stylesheet + "\n/* START:thincms-wrapper-overrides\n   Overrides. Keep last. */\n.w{max-width:60rem}\n/* END:thincms-wrapper-overrides */\n";
+    const head = (original.customHeadHtml || "") + "\n<!-- START:fonts -->\n<link rel=x>\n<!-- END:fonts -->\n";
+    assert(!(await call(hosted, "thincms_update_template", { stylesheet: css, customHeadHtml: head })).isError, "setup failed");
+
+    const listed = await call(hosted, "thincms_get_template", { sections: true });
+    assert(listed.data.stylesheet.sections.some((x: any) => x.name === "thincms-wrapper-overrides"), listed.text.slice(0, 500));
+    assert(listed.data.customHeadHtml.sections.some((x: any) => x.name === "fonts"), "fonts section not listed");
+
+    const p1 = await call(hosted, "thincms_patch_css", { section: "thincms-wrapper-overrides", css: ".w{max-width:72rem}" });
+    assert(!p1.isError, p1.text);
+    const p2 = await call(hosted, "thincms_patch_template", { component: "customHeadHtml", section: "fonts", content: "<link rel=y>" });
+    assert(!p2.isError, p2.text);
+
+    const now = await call(hosted, "thincms_get_template", {});
+    assert(now.data.stylesheet.includes("Overrides. Keep last. */\n.w{max-width:72rem}\n/* END:thincms-wrapper-overrides */"), "css patch wrong");
+    assert(now.data.customHeadHtml.includes("<!-- START:fonts -->\n<link rel=y>\n<!-- END:fonts -->"), "head patch wrong");
+
+    const frame = await call(hosted, "thincms_patch_template", { component: "pageFrame", section: "nope", content: "x", dryRun: true });
+    assert(frame.isError && /Section markers not found/.test(frame.text), frame.text);
+  } finally {
+    await call(hosted, "thincms_update_template", { stylesheet: original.stylesheet, customHeadHtml: original.customHeadHtml ?? "" });
+  }
+});
+
+await test("update_template dryRun reports per-field changes without writing", async () => {
+  const meta = await call(hosted, "thincms_get_template", { metadataOnly: true });
+  const dry = await call(hosted, "thincms_update_template", { customHeadHtml: "<!-- dry -->", dryRun: true });
+  assert(!dry.isError && dry.data.dryRun && dry.data.customHeadHtml.after.sha256 === sha256("<!-- dry -->") && dry.data.stylesheet.unchanged, dry.text);
+  const after = await call(hosted, "thincms_get_template", { metadataOnly: true });
+  assert(after.data.customHeadHtml.sha256 === meta.data.customHeadHtml.sha256, "dry run wrote");
+});
+
+console.log("\nDownload links");
+await test("get_page asDownload gives a single-use link to the exact HTML", async () => {
+  const r = await call(hosted, "thincms_get_page", { id: pageId, asDownload: true });
+  assert(!r.isError && r.data.downloads.length === 1, r.text);
+  const d = r.data.downloads[0];
+  const res = await fetch(d.downloadUrl);
+  const body = Buffer.from(await res.arrayBuffer());
+  assert(res.ok && sha256(body) === d.sha256, `download hash ${sha256(body)} vs ${d.sha256}`);
+  assert((await fetch(d.downloadUrl)).status === 409, "second fetch not refused");
+});
+
+await test("get_template asDownload returns three files matching metadataOnly hashes", async () => {
+  const r = await call(hosted, "thincms_get_template", { asDownload: true });
+  const meta = await call(hosted, "thincms_get_template", { metadataOnly: true });
+  assert(r.data.downloads.map((d: any) => d.filename).join() === "stylesheet.css,pageFrame.html,customHeadHtml.html", r.text);
+  for (const d of r.data.downloads) {
+    const body = Buffer.from(await (await fetch(d.downloadUrl)).arrayBuffer());
+    assert(sha256(body) === meta.data[d.field].sha256, `${d.field} hash differs`);
+  }
+});
+
+await test("export_subscribers_csv asDownload returns a link", async () => {
+  const r = await call(hosted, "thincms_export_subscribers_csv", { asDownload: true });
+  assert(!r.isError && r.data.downloads[0].filename === "subscribers.csv", r.text);
+  assert((await fetch(r.data.downloads[0].downloadUrl)).ok, "download failed");
+});
+
 console.log("\nCleanup");
 await test("delete test page and media", async () => {
   if (pageId) assert(!(await call(hosted, "thincms_delete_page", { id: pageId })).isError, "page delete failed");
   if (mediaId) assert(!(await call(hosted, "thincms_delete_media", { id: mediaId })).isError, "media delete failed");
+  if (secPageId) assert(!(await call(hosted, "thincms_delete_page", { id: secPageId })).isError, "sections page delete failed");
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

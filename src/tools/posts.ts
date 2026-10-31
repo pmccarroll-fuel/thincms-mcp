@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult, stripContentFromList, summarizeContentResponse, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY, checkExpectedHash, metadataOnly, EXPECTED_SHA_FIELD, METADATA_ONLY_FIELD } from "../helpers.js";
+import { formatResult, stripContentFromList, summarizeContentResponse, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY, checkExpectedHash, metadataOnly, EXPECTED_SHA_FIELD, METADATA_ONLY_FIELD, AS_DOWNLOAD_FIELD, downloadLinks } from "../helpers.js";
 import { scheduledForSchema } from "../validation.js";
 
 export function registerPostTools(server: McpServer, client: ThinCMSClient) {
@@ -44,13 +44,22 @@ export function registerPostTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_get_post",
-    "Get a single blog post by ID, including full HTML content, author, categories, and tags. Pass metadataOnly=true to get bytes/sha256 of content and membersContent instead of the HTML.",
+    "Get a single blog post by ID, including full HTML content, author, categories, and tags. Pass metadataOnly=true to get bytes/sha256 of content and membersContent instead of the HTML. Pass asDownload=true for single-use download links to the HTML (content, and membersContent when set).",
     {
       id: z.string().describe("Post ID"),
       metadataOnly: METADATA_ONLY_FIELD,
+      asDownload: AS_DOWNLOAD_FIELD,
     },
     async (params) => {
       const result = await client.get(`/posts/${params.id}`);
+      if (result.ok && params.asDownload) {
+        const slug = result.data.slug || params.id;
+        const files = [{ field: "content", filename: `${slug}.html`, contentType: "text/html", content: result.data.content ?? "" }];
+        if (result.data.membersContent) {
+          files.push({ field: "membersContent", filename: `${slug}.members.html`, contentType: "text/html", content: result.data.membersContent });
+        }
+        return downloadLinks(client, files);
+      }
       if (result.ok && params.metadataOnly) result.data = metadataOnly(result.data, ["content", "membersContent"]);
       return formatResult(result);
     }

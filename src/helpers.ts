@@ -159,7 +159,7 @@ const SITE_OVERRIDE_FIELD = z.string().optional().describe(
 );
 
 const CONFIRM_PRODUCTION_WRITE_FIELD = z.boolean().optional().describe(
-  "Acknowledge that this call may write to a configured production site (THINCMS_PRODUCTION_SITE_IDS env var). Required for any POST/PUT/PATCH/DELETE against a production-listed site; ignored otherwise. The error message lists which site triggered the requirement and recommends thincms_snapshot before any production write."
+  "Acknowledge that this call may write to a production site: one listed in THINCMS_PRODUCTION_SITE_IDS or, on the hosted server, any site whose status is live. Required for any write against a production site (dry runs excepted); ignored otherwise. The error message names the site and recommends thincms_snapshot before any production write."
 );
 
 export function siteAwareTool<S extends z.ZodRawShape>(
@@ -257,6 +257,7 @@ export async function resolveContentInput(
   client: ThinCMSClient,
   input: ContentInput,
   names: ContentNames,
+  opts: { peek?: boolean } = {},
 ): Promise<{ ok: true; value: string | undefined } | { ok: false; error: ApiResult }> {
   const fail = (error: string, status = 0) => ({ ok: false as const, error: { ok: false, status, data: { error } } });
   const given = [
@@ -278,10 +279,13 @@ export async function resolveContentInput(
   }
 
   if (input.uploadId !== undefined) {
-    // Uploads are single use: refuse a guarded write before consuming one
-    const guard = client.checkProductionWrite();
-    if (guard) return { ok: false, error: guard };
-    const upload = await client.consumeUpload(input.uploadId);
+    // Uploads are single use: refuse a guarded write before consuming one.
+    // A peek (dry run) neither writes nor uses the upload up.
+    if (!opts.peek) {
+      const guard = client.checkProductionWrite();
+      if (guard) return { ok: false, error: guard };
+    }
+    const upload = await client.consumeUpload(input.uploadId, { peek: opts.peek });
     if (!upload.ok) return { ok: false, error: upload.result };
     try {
       // fatal: refuse non-UTF-8 rather than silently substituting characters;
@@ -340,4 +344,50 @@ export const EXPECTED_SHA_FIELD = (field: string) => z.string().optional().descr
 
 export const METADATA_ONLY_FIELD = z.boolean().optional().describe(
   "Return bytes, lines and sha256 for each content field instead of the content itself. Use to check local and live are in sync without pulling the content into context.",
+);
+
+export const AS_DOWNLOAD_FIELD = z.boolean().optional().describe(
+  "Return single-use download links (valid 15 minutes, no auth header) instead of the content. Fetch with `curl -fsS -o <file> \"<downloadUrl>\"` and check with `shasum -a 256`. Use for large reads you want as a local file without pulling them into context.",
+);
+
+/**
+ * Stage each file as a download link and return the links (with bytes and
+ * sha256) in place of the content.
+ */
+export async function downloadLinks(
+  client: ThinCMSClient,
+  files: Array<{ field?: string; filename: string; contentType: string; content: string | Uint8Array }>,
+) {
+  const downloads: any[] = [];
+  for (const f of files) {
+    const staged = await client.stageDownload(f.content, f.filename, f.contentType);
+    if (!staged.ok) return formatResult(staged);
+    downloads.push({ ...(f.field ? { field: f.field } : {}), ...staged.data });
+  }
+  return formatResult({
+    ok: true,
+    status: 200,
+    data: {
+      downloads,
+      fetch: downloads.map((d) => `curl -fsS -o ${d.filename} "${d.downloadUrl}"`).join("\n"),
+    },
+  });
+}
+
+// Before/after summary for a dry-run full replacement of one content field
+export function dryRunField(before: string | null | undefined, after: string | undefined) {
+  const b = contentStats(before ?? "");
+  if (after === undefined) return { unchanged: true, current: b };
+  const a = contentStats(after);
+  return {
+    before: b,
+    after: a,
+    bytesDelta: a.bytes - b.bytes,
+    linesDelta: a.lines - b.lines,
+    identical: a.sha256 === b.sha256,
+  };
+}
+
+export const DRY_RUN_REPLACE_FIELD = z.boolean().optional().describe(
+  "Report what the write would change — before/after bytes, lines and sha256 per content field — without writing. A staged upload used in a dry run stays usable for the real call.",
 );

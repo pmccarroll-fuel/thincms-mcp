@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult, siteAwareTool } from "../helpers.js";
+import { AS_DOWNLOAD_FIELD, downloadLinks, formatResult, siteAwareTool } from "../helpers.js";
 
 export function registerSubscriberTools(server: McpServer, client: ThinCMSClient) {
   siteAwareTool(server, client, 
@@ -24,10 +24,16 @@ export function registerSubscriberTools(server: McpServer, client: ThinCMSClient
 
   siteAwareTool(server, client, 
     "thincms_export_subscribers_csv",
-    "Export all subscribers as CSV data.",
-    {},
-    async () => {
+    "Export all subscribers as CSV data. Pass asDownload=true to get a single-use download link instead of the CSV inline.",
+    {
+      asDownload: AS_DOWNLOAD_FIELD,
+    },
+    async (params) => {
       const result = await client.get("/subscribers", { format: "csv" });
+      if (result.ok && params.asDownload) {
+        const csv = typeof result.data === "string" ? result.data : JSON.stringify(result.data);
+        return downloadLinks(client, [{ filename: "subscribers.csv", contentType: "text/csv", content: csv }]);
+      }
       return formatResult(result);
     }
   );
