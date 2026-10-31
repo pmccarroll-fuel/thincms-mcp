@@ -12,7 +12,7 @@ async function main() {
   process.env.THINCMS_API_KEY = process.env.THINCMS_API_KEY || "tcms_test";
   process.env.THINCMS_SITE_ID = process.env.THINCMS_SITE_ID || "test_site";
 
-  const server = createServer();
+  const { server } = createServer();
   const client = new Client({ name: "test-client", version: "1.0.0" });
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

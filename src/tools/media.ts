@@ -38,7 +38,7 @@ export function registerMediaTools(server: McpServer, client: ThinCMSClient) {
     "thincms_upload_media",
     "Upload an image or file to the media library. Provide exactly one source: filePath (local file), url (download from URL), or base64 (encoded content with filename). For images, optimized WebP variants (thumbnail 400px, medium 800px, large 1200px) are automatically generated and returned in the `variants` field.",
     {
-      filePath: z.string().optional().describe("Absolute path to a local file"),
+      filePath: z.string().optional().describe("Absolute path to a local file (local stdio server only; not available on the hosted server)"),
       url: z.string().optional().describe("URL to download and upload"),
       base64: z.string().optional().describe("Base64-encoded file content"),
       filename: z.string().optional().describe("Filename (required for base64, optional otherwise)"),

@@ -5,14 +5,14 @@ import { formatResult, formatText, getCurrentOverride, runWithOverride } from ".
 import { createSnapshot, getSnapshot, listSnapshots, describeScope, type SnapshotScope } from "../snapshot-store.js";
 
 // Resolve the snapshot site from current override (preferred) or active client.
-function resolveSiteForSnapshot(client: ThinCMSClient): { siteId: string; apiKey: string; siteName: string } {
+function resolveSiteForSnapshot(client: ThinCMSClient): { siteId: string; apiKey?: string; siteName: string } {
   const override = getCurrentOverride();
   if (override) return override;
   const active = client.getActiveSite();
   const profile = client.getSites().find((s) => s.siteId === active.siteId);
   return {
     siteId: active.siteId,
-    apiKey: profile?.apiKey ?? "",
+    apiKey: profile?.apiKey,
     siteName: active.name,
   };
 }
@@ -24,16 +24,16 @@ export function registerSnapshotTools(server: McpServer, client: ThinCMSClient) 
     {
       scope: z.enum(["settings", "template", "page", "post", "review"]).describe("What to snapshot. 'settings' captures editable site settings (excludes admin-only fields like name/domain that PUT can't restore from an editor key); 'template' captures stylesheet/pageFrame/customHeadHtml; 'page' / 'post' / 'review' capture editable fields of a single resource and require a resourceId."),
       resourceId: z.string().optional().describe("Required for scope='page', 'post', or 'review'. The resource ID to snapshot."),
-      siteId: z.string().optional().describe("Override the active site for this snapshot (matches the per-call siteId pattern used by other tools). Must match a siteId from your THINCMS_SITES config."),
+      siteId: z.string().optional().describe("Override the active site for this snapshot (matches the per-call siteId pattern used by other tools). Site ID or name; must be one of the sites from thincms_list_sites."),
     },
     async (params) => {
       // Resolve siteId override the same way siteAwareTool does, so snapshots
       // can target a specific tenant in multi-site setups.
-      let override: { siteId: string; apiKey: string; siteName: string } | undefined;
+      let override: { siteId: string; apiKey?: string; siteName: string } | undefined;
       if (params.siteId) {
-        const profile = client.getSites().find((s) => s.siteId === params.siteId);
+        const profile = client.findSite(params.siteId);
         if (!profile) {
-          return formatResult({ ok: false, status: 0, data: { error: `siteId "${params.siteId}" not found in THINCMS_SITES.` } });
+          return formatResult({ ok: false, status: 0, data: { error: `Site "${params.siteId}" is not one of your sites (see thincms_list_sites).` } });
         }
         override = { siteId: profile.siteId, apiKey: profile.apiKey, siteName: profile.name };
       }
@@ -143,7 +143,7 @@ export function registerSnapshotTools(server: McpServer, client: ThinCMSClient) 
         }
 
         const ctx = resolveSiteForSnapshot(client);
-        const snap = createSnapshot(ctx.siteId, ctx.siteName, scope, restoreData);
+        const snap = createSnapshot(client.getOwnerId(), ctx.siteId, ctx.siteName, scope, restoreData);
         return formatText(JSON.stringify({
           snapshotId: snap.id,
           siteName: snap.siteName,
@@ -165,7 +165,7 @@ export function registerSnapshotTools(server: McpServer, client: ThinCMSClient) 
       snapshotId: z.string().describe("The snapshot ID returned by thincms_snapshot."),
     },
     async (params) => {
-      const snap = getSnapshot(params.snapshotId);
+      const snap = getSnapshot(client.getOwnerId(), params.snapshotId);
       if (!snap) {
         return formatResult({ ok: false, status: 0, data: { error: `Snapshot "${params.snapshotId}" not found. Snapshots expire after 24 hours and are lost on MCP wrapper restart.` } });
       }
@@ -175,7 +175,7 @@ export function registerSnapshotTools(server: McpServer, client: ThinCMSClient) 
       // captured from — never use whatever happens to be active right now.
       const profile = client.getSites().find((s) => s.siteId === snap.siteId);
       if (!profile) {
-        return formatResult({ ok: false, status: 0, data: { error: `Snapshot's site "${snap.siteId}" no longer in THINCMS_SITES config.` } });
+        return formatResult({ ok: false, status: 0, data: { error: `Snapshot's site "${snap.siteId}" is no longer one of your sites.` } });
       }
       const override = { siteId: profile.siteId, apiKey: profile.apiKey, siteName: profile.name };
 
@@ -223,7 +223,7 @@ export function registerSnapshotTools(server: McpServer, client: ThinCMSClient) 
     "List all snapshots taken in the current MCP wrapper session. Useful for finding the right snapshotId to restore, or auditing what test writes have been made.",
     {},
     async () => {
-      const snaps = listSnapshots();
+      const snaps = listSnapshots(client.getOwnerId());
       const summary = snaps.map((s) => ({
         snapshotId: s.id,
         siteName: s.siteName,

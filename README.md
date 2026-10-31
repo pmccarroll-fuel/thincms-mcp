@@ -6,14 +6,35 @@ MCP (Model Context Protocol) server for [ThinCMS](https://github.com/pmccarroll-
 
 Wraps the ThinCMS REST API as **45 typed tools** that any MCP-compatible AI client can call directly. Instead of constructing HTTP requests, agents call tools like `thincms_create_post(title, content, status)` and get structured responses back.
 
-## Requirements
+## Connect to the hosted server (recommended)
+
+ThinCMS hosts this server at `https://<admin host>/mcp`. You sign in with your ThinCMS account (Google). No API keys needed.
+
+1. A site admin enables **MCP access** for you in ThinCMS (**Settings > Users > Edit**) and picks a level per site: read-only, editor or admin.
+2. Add the server:
+   - **Claude (web / desktop):** Settings → Connectors → Add custom connector → paste the URL → Connect.
+   - **Claude Code:** `claude mcp add --transport http thincms https://<admin host>/mcp`, then `/mcp` to sign in.
+3. Ask for a site by name. `thincms_list_sites` shows your sites and access level; every tool's `siteId` accepts a site ID or name.
+
+The hosted server can't access your filesystem: use `url` or `base64` for uploads instead of `filePath`; exports are returned in the response.
+
+### Running the hosted server
+
+```bash
+npm run build
+MCP_PUBLIC_URL=https://app.thincms.ai/mcp THINCMS_INTERNAL_URL=http://127.0.0.1:3000 PORT=3100 npm run start:http
+```
+
+ThinCMS acts as the OAuth authorization server. This process validates bearer tokens via `GET /api/v1/mcp/me` and forwards them to the REST API, which enforces each user's MCP permissions. In production it runs as the `thincms-mcp` PM2 app (see `../thincms/ecosystem.config.js`) behind nginx (`../thincms/deploy/nginx-mcp.conf`). Deploy with `bash deploy.sh`.
+
+## Local / self-hosted (stdio)
+
+### Requirements
 
 - Node.js 18+
 - A running ThinCMS instance
 - An API key from ThinCMS (Admin > API Keys)
 - An MCP-compatible client (Claude Desktop, Claude Code, VS Code, etc.)
-
-## Setup
 
 ### Claude Desktop
 
@@ -63,14 +84,18 @@ All tool names are prefixed with `thincms_` (e.g., `thincms_list_posts`).
 
 ## Permissions
 
-Uses the same API key auth as the REST API. API keys grant **editor-level** access — full CRUD on content, forms, templates, navigation, scripts, and secrets. Cannot change site settings, manage users, or run imports/backups.
+**Hosted:** each user's MCP level per site (read-only / editor / admin), capped by their normal site role and checked live on every call.
+
+**Local:** uses the same API key auth as the REST API. API keys grant **editor-level** access — full CRUD on content, forms, templates, navigation, scripts, and secrets. Cannot change site settings, manage users, or run imports/backups.
 
 ## Development
 
 ```bash
 npm install
 npm run build     # Compile TypeScript
-npm run dev       # Run with tsx (for development)
+npm run dev       # Run stdio server with tsx (for development)
+npm run dev:http  # Run hosted server with tsx (needs MCP_PUBLIC_URL)
+npx tsx tests/hosted-e2e.ts   # End-to-end OAuth + hosted MCP test (needs both servers running locally)
 ```
 
 ## License

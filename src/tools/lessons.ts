@@ -96,7 +96,7 @@ export function registerLessonTools(server: McpServer, client: ThinCMSClient) {
     "Upload a file attachment to a lesson. Provide a local file path, a URL to download from, or base64-encoded content.",
     {
       lessonId: z.string().describe("Lesson ID (required)"),
-      filePath: z.string().optional().describe("Local file path to upload"),
+      filePath: z.string().optional().describe("Local file path to upload (local stdio server only; not available on the hosted server)"),
       url: z.string().optional().describe("URL to download and attach"),
       base64: z.string().optional().describe("Base64-encoded file content"),
       filename: z.string().optional().describe("Filename (required for base64, optional otherwise)"),

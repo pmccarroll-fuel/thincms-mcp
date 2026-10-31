@@ -1,16 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ThinCMSClient } from "./client.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, type ThinCMSConfig } from "./config.js";
 import { registerAllTools } from "./tools/index.js";
-import { getMcpVersion, setActiveClient } from "./helpers.js";
+import { getMcpVersion } from "./helpers.js";
 
-export function createServer(): McpServer {
-  const config = loadConfig();
+// stdio: config comes from env. Hosted: one server per user session, built
+// from that user's token and permitted sites (see http.ts).
+export function createServer(config: ThinCMSConfig = loadConfig()): { server: McpServer; client: ThinCMSClient } {
   const client = new ThinCMSClient(config);
-
-  // Register the client globally so formatResult can stamp every response
-  // with the active site name + wrapper version.
-  setActiveClient(client);
 
   const server = new McpServer({
     name: "thincms-mcp",
@@ -19,5 +16,5 @@ export function createServer(): McpServer {
 
   registerAllTools(server, client);
 
-  return server;
+  return { server, client };
 }

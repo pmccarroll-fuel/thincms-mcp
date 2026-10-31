@@ -152,11 +152,34 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
     return abs;
   }
 
+  // Hosted mode never writes to the server's disk: binary exports come back
+  // as an embedded MCP resource (base64), text exports inline.
+  function deliverRemote(raw: { bytes: Uint8Array; contentType: string; filename: string | null }, fallbackName: string) {
+    const filename = raw.filename || fallbackName;
+    const isText = /^(text\/|application\/(json|csv))/.test(raw.contentType) || /\.(md|csv)$/i.test(filename);
+    if (isText) {
+      return formatResult({ ok: true, status: 200, data: new TextDecoder().decode(raw.bytes) });
+    }
+    return {
+      content: [
+        { type: "text" as const, text: `Export ready: ${filename} (${raw.bytes.length} bytes, ${raw.contentType}). outputPath is ignored on the hosted server; the file is attached below.` },
+        {
+          type: "resource" as const,
+          resource: {
+            uri: `thincms://exports/${encodeURIComponent(filename)}`,
+            mimeType: raw.contentType || "application/octet-stream",
+            blob: Buffer.from(raw.bytes).toString("base64"),
+          },
+        },
+      ],
+    };
+  }
+
   siteAwareTool(
     server,
     client,
     "thincms_export_workbook_response",
-    "Export a single learner's workbook response as PDF or Markdown. Pass outputPath to write the file to disk (required for PDF; recommended for Markdown). Without outputPath, Markdown is returned inline.",
+    "Export a single learner's workbook response as PDF or Markdown. Locally, pass outputPath to write the file to disk (required for PDF; recommended for Markdown); without outputPath, Markdown is returned inline. On the hosted server outputPath is ignored: PDFs come back as an attached resource and Markdown inline.",
     {
       workbookId: z.string().describe("Workbook ID (required)"),
       userId: z.string().describe("Learner user ID (required)"),
@@ -164,7 +187,7 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
       outputPath: z.string().optional().describe("Local file path to write the export to. Required for PDF."),
     },
     async (params) => {
-      if (params.format === "pdf" && !params.outputPath) {
+      if (params.format === "pdf" && !params.outputPath && !client.isRemote()) {
         return formatResult({
           ok: false,
           status: 0,
@@ -176,6 +199,9 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
         { format: params.format },
       );
       if (!raw.ok) return formatResult(raw);
+      if (client.isRemote()) {
+        return deliverRemote(raw, `workbook-${params.workbookId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`);
+      }
       if (params.outputPath) {
         const saved = await saveBytesTo(params.outputPath, raw.bytes);
         return formatResult({
@@ -193,7 +219,7 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
     server,
     client,
     "thincms_export_course_portfolio",
-    "Export a learner's full course portfolio (every workbook in module order) as PDF or Markdown. Pass outputPath for PDF (required) or to save the Markdown to disk.",
+    "Export a learner's full course portfolio (every workbook in module order) as PDF or Markdown. Locally, pass outputPath for PDF (required) or to save the Markdown to disk. On the hosted server outputPath is ignored: PDFs come back as an attached resource and Markdown inline.",
     {
       courseId: z.string().describe("Course ID (required)"),
       userId: z.string().describe("Learner user ID (required)"),
@@ -201,7 +227,7 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
       outputPath: z.string().optional().describe("Local file path to write the export to. Required for PDF."),
     },
     async (params) => {
-      if (params.format === "pdf" && !params.outputPath) {
+      if (params.format === "pdf" && !params.outputPath && !client.isRemote()) {
         return formatResult({
           ok: false,
           status: 0,
@@ -213,6 +239,9 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
         { format: params.format },
       );
       if (!raw.ok) return formatResult(raw);
+      if (client.isRemote()) {
+        return deliverRemote(raw, `portfolio-${params.courseId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`);
+      }
       if (params.outputPath) {
         const saved = await saveBytesTo(params.outputPath, raw.bytes);
         return formatResult({
@@ -230,7 +259,7 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
     server,
     client,
     "thincms_export_workbook_responses_csv",
-    "Export every learner response for a workbook as CSV (admin). Pass outputPath to save to disk; otherwise the CSV body is returned inline.",
+    "Export every learner response for a workbook as CSV (admin). Locally, pass outputPath to save to disk; otherwise (and always on the hosted server) the CSV body is returned inline.",
     {
       workbookId: z.string().describe("Workbook ID (required)"),
       outputPath: z.string().optional().describe("Local file path to write the CSV to"),
@@ -238,6 +267,9 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
     async (params) => {
       const raw = await client.getRaw(`/workbooks/${params.workbookId}/responses/export`, { format: "csv" });
       if (!raw.ok) return formatResult(raw);
+      if (client.isRemote()) {
+        return deliverRemote(raw, `workbook-${params.workbookId}-responses.csv`);
+      }
       if (params.outputPath) {
         const saved = await saveBytesTo(params.outputPath, raw.bytes);
         return formatResult({

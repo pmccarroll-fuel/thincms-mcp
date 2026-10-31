@@ -7,23 +7,57 @@ import { getCurrentOverride } from "./helpers.js";
 
 export class ThinCMSClient {
   private baseUrl: string;
-  private apiKey: string;
+  private apiKey: string | undefined;
   private siteId: string;
   private sites: SiteProfile[];
   private activeSiteName: string;
   private productionSiteIds: Set<string>;
+  private bearerToken: string | undefined;
+  private remote: boolean;
+  private ownerId: string;
 
   constructor(config: ThinCMSConfig) {
     this.baseUrl = config.baseUrl;
     this.apiKey = config.apiKey;
     this.siteId = config.siteId;
     this.sites = config.sites;
-    this.activeSiteName = config.sites[0].name;
+    this.activeSiteName = config.sites[0]?.name ?? "";
     this.productionSiteIds = new Set(config.productionSiteIds ?? []);
+    this.bearerToken = config.bearerToken;
+    this.remote = config.remote ?? false;
+    this.ownerId = config.ownerId ?? "local";
   }
 
   getSites(): SiteProfile[] {
     return this.sites;
+  }
+
+  isRemote(): boolean {
+    return this.remote;
+  }
+
+  getOwnerId(): string {
+    return this.ownerId;
+  }
+
+  // Hosted mode: refresh credentials and the permitted site list on every
+  // request, so token refreshes and admin permission changes apply mid-session.
+  updateHostedAuth(bearerToken: string, sites: SiteProfile[]): void {
+    this.bearerToken = bearerToken;
+    this.sites = sites;
+    if (sites.length > 0 && !sites.some((s) => s.siteId === this.siteId)) {
+      this.siteId = sites[0].siteId;
+      this.activeSiteName = sites[0].name;
+    }
+  }
+
+  /** Resolve a site by ID or (case-insensitive) name. */
+  findSite(idOrName: string): SiteProfile | undefined {
+    const needle = idOrName.toLowerCase();
+    return (
+      this.sites.find((s) => s.siteId === idOrName) ??
+      this.sites.find((s) => s.name.toLowerCase() === needle)
+    );
   }
 
   isProductionSite(siteId: string): boolean {
@@ -39,9 +73,7 @@ export class ThinCMSClient {
   }
 
   switchSite(name: string): { name: string; siteId: string } | null {
-    const profile = this.sites.find(
-      (s) => s.name.toLowerCase() === name.toLowerCase()
-    );
+    const profile = this.findSite(name);
     if (!profile) return null;
     this.apiKey = profile.apiKey;
     this.siteId = profile.siteId;
@@ -55,10 +87,44 @@ export class ThinCMSClient {
     // — single-tenant flows, switch_site users — falls back to instance
     // state and behaves exactly as before.
     const override = getCurrentOverride();
+    const siteId = override?.siteId ?? this.siteId;
+    if (this.bearerToken) {
+      return { Authorization: `Bearer ${this.bearerToken}`, "X-Site-Id": siteId };
+    }
     return {
-      "X-API-Key": override?.apiKey ?? this.apiKey,
-      "X-Site-Id": override?.siteId ?? this.siteId,
+      "X-API-Key": (override?.apiKey ?? this.apiKey)!,
+      "X-Site-Id": siteId,
     };
+  }
+
+  // Hosted mode: a URL source is fetched by the server, so refuse anything
+  // that resolves to a private/loopback/link-local address (SSRF), and check
+  // every redirect hop the same way.
+  private async fetchSourceUrl(rawUrl: string): Promise<Response> {
+    if (!this.remote) return fetch(rawUrl);
+    let current = rawUrl;
+    for (let hop = 0; hop < 5; hop++) {
+      await assertPublicUrl(current);
+      const res = await fetch(current, { redirect: "manual" });
+      const location = res.headers.get("location");
+      if (res.status >= 300 && res.status < 400 && location) {
+        current = new URL(location, current).toString();
+        continue;
+      }
+      return res;
+    }
+    throw new Error("Too many redirects");
+  }
+
+  private rejectLocalPath(filePath?: string): ApiResult | null {
+    if (filePath && this.remote) {
+      return {
+        ok: false,
+        status: 0,
+        data: { error: "filePath is not available on the hosted MCP server. Provide url or base64 (with filename) instead." },
+      };
+    }
+    return null;
   }
 
   // Production-site write guard. Returns an error ApiResult when the call
@@ -208,6 +274,9 @@ export class ThinCMSClient {
       fields?: Record<string, string | undefined>;
     }
   ): Promise<ApiResult> {
+    const localPathError = this.rejectLocalPath(options.filePath);
+    if (localPathError) return localPathError;
+
     const formData = new FormData();
 
     if (options.filePath) {
@@ -216,7 +285,12 @@ export class ThinCMSClient {
       const blob = new Blob([buffer]);
       formData.append("file", blob, name);
     } else if (options.url) {
-      const res = await fetch(options.url);
+      let res: Response;
+      try {
+        res = await this.fetchSourceUrl(options.url);
+      } catch (err: any) {
+        return { ok: false, status: 0, data: { error: `Refused to fetch URL: ${err.message}` } };
+      }
       if (!res.ok) {
         return {
           ok: false,
@@ -274,6 +348,9 @@ export class ThinCMSClient {
       filename?: string;
     }
   ): Promise<ApiResult> {
+    const localPathError = this.rejectLocalPath(options.filePath);
+    if (localPathError) return localPathError;
+
     const formData = new FormData();
 
     if (options.filePath) {
@@ -282,7 +359,12 @@ export class ThinCMSClient {
       const blob = new Blob([buffer]);
       formData.append("file", blob, name);
     } else if (options.url) {
-      const res = await fetch(options.url);
+      let res: Response;
+      try {
+        res = await this.fetchSourceUrl(options.url);
+      } catch (err: any) {
+        return { ok: false, status: 0, data: { error: `Refused to fetch URL: ${err.message}` } };
+      }
       if (!res.ok) {
         return {
           ok: false,
@@ -322,4 +404,45 @@ export class ThinCMSClient {
       body: formData,
     });
   }
+}
+
+// SSRF guard for hosted mode. Exported for tests.
+export async function assertPublicUrl(rawUrl: string): Promise<void> {
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    throw new Error("invalid URL");
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new Error("only http(s) URLs are allowed");
+  }
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  const addresses = await lookup(host, { all: true });
+  for (const { address } of addresses) {
+    if (isPrivateAddress(address)) {
+      throw new Error(`${u.hostname} resolves to a non-public address`);
+    }
+  }
+}
+
+export function isPrivateAddress(address: string): boolean {
+  const v4 = address.startsWith("::ffff:") ? address.slice(7) : address;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(v4)) {
+    const [a, b] = v4.split(".").map(Number);
+    return (
+      a === 0 || a === 10 || a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) || // CGNAT
+      (a === 169 && b === 254) ||           // link-local / cloud metadata
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a >= 224                              // multicast / reserved
+    );
+  }
+  const v6 = address.toLowerCase();
+  return (
+    v6 === "::" || v6 === "::1" ||
+    v6.startsWith("fc") || v6.startsWith("fd") || // unique local
+    v6.startsWith("fe8") || v6.startsWith("fe9") || v6.startsWith("fea") || v6.startsWith("feb") // link-local
+  );
 }

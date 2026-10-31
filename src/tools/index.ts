@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ThinCMSClient } from "../client.js";
-import { recordToolName } from "../helpers.js";
+import { recordToolName, runWithClient } from "../helpers.js";
 import { registerCapabilitiesTool } from "./capabilities.js";
 import { registerSnapshotTools } from "./snapshots.js";
 import { registerPostTools } from "./posts.js";
@@ -45,9 +45,17 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   // tool registry. thincms_capabilities reads it back to surface the live
   // tool surface — lets agents detect when their MCP host has cached a
   // stale schema set despite a current version stamp.
+  //
+  // The same interceptor binds each handler to this server's client via
+  // runWithClient, so formatResult and the snapshot store see the right
+  // session when many users share one hosted process.
   const realTool = (server as any).tool.bind(server);
   (server as any).tool = (name: string, ...rest: any[]) => {
     recordToolName(name);
+    const handler = rest[rest.length - 1];
+    if (typeof handler === "function") {
+      rest[rest.length - 1] = (...args: any[]) => runWithClient(client, () => handler(...args));
+    }
     return realTool(name, ...rest);
   };
 

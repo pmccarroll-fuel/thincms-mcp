@@ -1,14 +1,27 @@
 export interface SiteProfile {
   name: string;
   siteId: string;
-  apiKey: string;
+  // Present for local/API-key mode. Absent in hosted mode, where every call
+  // carries the user's OAuth bearer token instead.
+  apiKey?: string;
+  // Hosted mode only: the user's effective MCP role on this site.
+  role?: string;
+  domain?: string;
 }
 
 export interface ThinCMSConfig {
   baseUrl: string;
-  apiKey: string;
+  apiKey?: string;
   siteId: string;
   sites: SiteProfile[];
+  // Hosted mode: OAuth access token sent as `Authorization: Bearer` with
+  // X-Site-Id, replacing X-API-Key. Updated per request as clients refresh.
+  bearerToken?: string;
+  // Hosted mode: the process serves many users, so tools must not read or
+  // write the server's own filesystem or fetch internal network addresses.
+  remote?: boolean;
+  // Scopes per-process state (snapshots) to one user. "local" for stdio.
+  ownerId?: string;
   // Site IDs that should be treated as production. When set, any write tool
   // (POST/PUT/PATCH/DELETE) targeting one of these sites requires
   // confirmProductionWrite: true on the call. Acts as a backstop against

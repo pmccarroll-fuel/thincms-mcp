@@ -2,6 +2,8 @@
 // Per-process (lives until the MCP wrapper restarts); not persisted to disk.
 // Designed for the test-cleanup workflow: take a snapshot before a write,
 // restore by ID after, get exact pre-write bytes back.
+// Every snapshot carries an ownerId (the hosted user, or "local" for stdio);
+// reads only return the caller's own snapshots.
 
 import { randomUUID } from "node:crypto";
 
@@ -14,6 +16,7 @@ export type SnapshotScope =
 
 export interface Snapshot {
   id: string;
+  ownerId: string;
   siteId: string;
   siteName: string;
   scope: SnapshotScope;
@@ -26,6 +29,7 @@ const TTL_MS = 24 * 60 * 60 * 1000; // 24h
 const _store = new Map<string, Snapshot>();
 
 export function createSnapshot(
+  ownerId: string,
   siteId: string,
   siteName: string,
   scope: SnapshotScope,
@@ -35,6 +39,7 @@ export function createSnapshot(
   const now = new Date();
   const snap: Snapshot = {
     id: randomUUID(),
+    ownerId,
     siteId,
     siteName,
     scope,
@@ -46,14 +51,15 @@ export function createSnapshot(
   return snap;
 }
 
-export function getSnapshot(id: string): Snapshot | null {
+export function getSnapshot(ownerId: string, id: string): Snapshot | null {
   pruneExpired();
-  return _store.get(id) ?? null;
+  const snap = _store.get(id);
+  return snap && snap.ownerId === ownerId ? snap : null;
 }
 
-export function listSnapshots(): Snapshot[] {
+export function listSnapshots(ownerId: string): Snapshot[] {
   pruneExpired();
-  return Array.from(_store.values()).sort((a, b) => b.capturedAt.getTime() - a.capturedAt.getTime());
+  return Array.from(_store.values()).filter((s) => s.ownerId === ownerId).sort((a, b) => b.capturedAt.getTime() - a.capturedAt.getTime());
 }
 
 function pruneExpired(): void {

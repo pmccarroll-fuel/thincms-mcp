@@ -23,22 +23,28 @@ export function getMcpVersion(): string {
   return MCP_VERSION;
 }
 
-// Active client reference, set once by createServer(). Used by formatResult
-// to inject the active site name on every tool response so the agent knows
-// which tenant the call hit.
-let _activeClient: ThinCMSClient | null = null;
+// Client for the current tool call. The hosted server runs one McpServer per
+// user session in a single process, so this can't be a module global: every
+// tool handler is wrapped (see tools/index.ts) to run inside this context.
+// formatResult reads it to stamp the active site name on every response.
+const _clientStore = new AsyncLocalStorage<ThinCMSClient>();
 
-export function setActiveClient(client: ThinCMSClient): void {
-  _activeClient = client;
+export function runWithClient<T>(client: ThinCMSClient, fn: () => T): T {
+  return _clientStore.run(client, fn);
+}
+
+export function getCurrentClient(): ThinCMSClient | undefined {
+  return _clientStore.getStore();
 }
 
 // Tool registry — every tool registered through registerTool() is recorded
 // here so thincms_capabilities can return the live list. Lets agents detect
 // when their MCP host has cached a stale tool surface (registered count
 // doesn't match what they expect for the running version).
-const _toolRegistry: string[] = [];
+// A Set, because the hosted server registers the same tools once per session.
+const _toolRegistry = new Set<string>();
 export function recordToolName(name: string): void {
-  _toolRegistry.push(name);
+  _toolRegistry.add(name);
 }
 export function getRegisteredTools(): string[] {
   return [..._toolRegistry];
@@ -50,7 +56,7 @@ export function getRegisteredTools(): string[] {
 // handler bodies don't need to know about it.
 export type SiteOverride = {
   siteId: string;
-  apiKey: string;
+  apiKey?: string;
   siteName: string;
   confirmProductionWrite?: boolean;
 };
@@ -70,7 +76,7 @@ function metaPrefix(): string {
   if (override) {
     return `[${override.siteName} [${override.siteId}] · mcp v${MCP_VERSION}]`;
   }
-  const site = _activeClient?.getActiveSite();
+  const site = _clientStore.getStore()?.getActiveSite();
   const siteLabel = site?.name ? `${site.name} [${site.siteId}]` : "no active site";
   return `[${siteLabel} · mcp v${MCP_VERSION}]`;
 }
@@ -105,10 +111,10 @@ export function formatResult(result: ApiResult) {
   if (result.data?.code === "RESOURCE_ON_DIFFERENT_SITE") {
     const targetSiteId: string = result.data.siteId;
     const targetSiteName: string = result.data.siteName ?? "(unknown)";
-    const configured = _activeClient?.getSites().find((s) => s.siteId === targetSiteId);
+    const configured = _clientStore.getStore()?.getSites().find((s) => s.siteId === targetSiteId);
     const hint = configured
       ? `Run thincms_switch_site(name="${configured.name}") then retry.`
-      : `This resource belongs to siteId=${targetSiteId} (${targetSiteName}), which is not in your THINCMS_SITES config.`;
+      : `This resource belongs to siteId=${targetSiteId} (${targetSiteName}), which is not one of your configured/permitted sites.`;
     return {
       content: [{
         type: "text" as const,
@@ -147,7 +153,7 @@ export function stripContentFromList(posts: any[]): any[] {
 // state. Per-tool handler bodies need no changes — the propagation is
 // transparent through await chains.
 const SITE_OVERRIDE_FIELD = z.string().optional().describe(
-  "Override the active site for this single call. Pass to target a specific tenant without mutating shared active-site state — the right pattern when running concurrent agent sessions managing different tenants. Must match a siteId from your THINCMS_SITES config (use thincms_list_sites to inspect). When omitted, the call uses the active site set by thincms_switch_site."
+  "Override the active site for this single call — a site ID or site name (case-insensitive). Pass to target a specific tenant without mutating shared active-site state — the right pattern when running concurrent agent sessions managing different tenants. Must be one of the sites from thincms_list_sites. When omitted, the call uses the active site set by thincms_switch_site."
 );
 
 const CONFIRM_PRODUCTION_WRITE_FIELD = z.boolean().optional().describe(
@@ -173,8 +179,9 @@ export function siteAwareTool<S extends z.ZodRawShape>(
     const targetSiteId = siteId ?? client.getActiveSite().siteId;
     let siteName: string | undefined;
     let apiKey: string | undefined;
+    let resolvedSiteId = targetSiteId;
     if (siteId) {
-      const profile = client.getSites().find((s) => s.siteId === siteId);
+      const profile = client.findSite(siteId);
       if (!profile) {
         const available = client
           .getSites()
@@ -184,10 +191,11 @@ export function siteAwareTool<S extends z.ZodRawShape>(
           ok: false,
           status: 0,
           data: {
-            error: `siteId "${siteId}" not in your configured THINCMS_SITES. Available: ${available}. Use thincms_list_sites to inspect, or thincms_switch_site to change the active site.`,
+            error: `Site "${siteId}" is not one of your sites. Available: ${available || "(none)"}. Use thincms_list_sites to inspect, or thincms_switch_site to change the active site.`,
           },
         });
       }
+      resolvedSiteId = profile.siteId;
       siteName = profile.name;
       apiKey = profile.apiKey;
     } else {
@@ -196,7 +204,7 @@ export function siteAwareTool<S extends z.ZodRawShape>(
       apiKey = profile?.apiKey;
     }
     return runWithOverride(
-      { siteId: targetSiteId, apiKey: apiKey!, siteName: siteName!, confirmProductionWrite },
+      { siteId: resolvedSiteId, apiKey, siteName: siteName!, confirmProductionWrite },
       () => handler(rest),
     );
   });

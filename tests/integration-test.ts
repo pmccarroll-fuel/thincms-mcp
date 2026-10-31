@@ -11,7 +11,7 @@ process.env.THINCMS_BASE_URL = "http://localhost:3000";
 process.env.THINCMS_API_KEY = "tcms_3221b8d7085f4c91919880d5f1d6b63a";
 process.env.THINCMS_SITE_ID = "cmmd3v5bz0000it37ojv442kt";
 
-const server = createServer();
+const { server } = createServer();
 const client = new Client({ name: "integration-test", version: "1.0.0" });
 const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 await Promise.all([

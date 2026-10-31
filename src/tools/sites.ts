@@ -6,7 +6,7 @@ import { formatResult, formatText } from "../helpers.js";
 export function registerSiteTools(server: McpServer, client: ThinCMSClient) {
   server.tool(
     "thincms_list_sites",
-    "List all configured ThinCMS sites with preview URLs and status (preview/live). Shows which site is currently active.",
+    "List the ThinCMS sites you can access with preview URLs and status (preview/live). Shows which site is currently active and, on the hosted server, your MCP access level per site.",
     {},
     async () => {
       const sites = client.getSites();
@@ -29,6 +29,7 @@ export function registerSiteTools(server: McpServer, client: ThinCMSClient) {
           const previewUrl = settings?.previewUrl || null;
 
           let line = `${marker}  ${s.name} [${s.siteId}] — status: ${status}`;
+          if (s.role) line += `\n          your MCP access: ${s.role === "viewer" ? "read-only" : s.role}`;
           if (settings?.domain) line += `\n          domain: ${settings.domain}`;
           if (previewUrl) line += `\n          preview: ${previewUrl}`;
           lines.push({ line, isActive });
@@ -51,12 +52,12 @@ export function registerSiteTools(server: McpServer, client: ThinCMSClient) {
     "thincms_switch_site",
     "Switch the active ThinCMS site. All subsequent API calls will use this site's credentials.",
     {
-      name: z.string().describe("The name of the site to switch to (case-insensitive)"),
+      name: z.string().describe("The site name (case-insensitive) or site ID to switch to"),
     },
     async ({ name }) => {
       const sites = client.getSites();
-      if (sites.length <= 1) {
-        return formatText("Only one site is configured. Nothing to switch to.", true);
+      if (sites.length === 0) {
+        return formatText("No sites are available. Ask a site admin to enable MCP access for you.", true);
       }
 
       const result = client.switchSite(name);
