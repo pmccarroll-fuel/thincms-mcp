@@ -16,6 +16,7 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
     "List course enrollments. Each has `member` (id, email, name, firm, hasSignedIn, canSignIn), course, status and welcome-email state (welcomeEmailSentAt / welcomeEmailScheduledFor / welcomeEmailError). Also returns `firms` for grouping.",
     {
       courseId: z.string().optional().describe("Filter by course ID"),
+      cohortId: z.string().optional().describe("Filter by cohort ID ('none' = learners without a cohort)"),
       status: z.enum(["pending", "active", "revoked", "completed"]).optional().describe("Filter by enrollment status"),
       firm: z.string().optional().describe("Filter by the learner's firm/team"),
       search: z.string().optional().describe("Search learner email or name"),
@@ -40,6 +41,7 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
       email: z.string().describe("Learner's email address (required)"),
       name: z.string().optional().describe("Learner's name"),
       firm: z.string().optional().describe("Learner's firm or team, for grouping seats from one organisation"),
+      cohortId: z.string().optional().describe("Put the learner in this cohort (see thincms_list_cohorts)"),
       sendWelcomeAt,
       sendEmail: z.boolean().optional().describe("Set false to enrol without any welcome email (default true)"),
     },
@@ -51,14 +53,16 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
 
   siteAwareTool(server, client,
     "thincms_import_learners",
-    "Bulk-enrol learners in a course (one row per seat). Same behaviour as thincms_create_enrollment for each row. Give either `learners` (array) or a CSV with a header row containing `email` and optionally `name` and `firm` (as csv, csvFile or csvUploadId). Returns a summary plus per-row results and errors. Max 500 rows per call.",
+    "Bulk-enrol learners in a course (one row per seat). Same behaviour as thincms_create_enrollment for each row. Give either `learners` (array) or a CSV with a header row containing `email` and optionally `name`, `firm` and `cohort` (slug or name) (as csv, csvFile or csvUploadId). Returns a summary plus per-row results and errors. Max 500 rows per call.",
     {
       courseId: z.string().describe("Course ID (required)"),
       learners: z.array(z.object({
         email: z.string(),
         name: z.string().optional(),
         firm: z.string().optional(),
+        cohort: z.string().optional().describe("Cohort slug or name"),
       })).optional().describe("Learners to enrol"),
+      cohortId: z.string().optional().describe("Default cohort for rows without their own"),
       csv: z.string().optional().describe("CSV text with a header row (email, name, firm)"),
       csvFile: z.string().optional().describe("Local path to the CSV" + LOCAL_ONLY),
       csvUploadId: uploadIdField("the CSV"),
@@ -66,13 +70,13 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
       sendEmail: z.boolean().optional().describe("Set false to enrol without welcome emails (default true)"),
     },
     async (params) => {
-      const { courseId, learners, csv, csvFile, csvUploadId, sendWelcomeAt: when, sendEmail } = params;
+      const { courseId, learners, csv, csvFile, csvUploadId, sendWelcomeAt: when, sendEmail, cohortId } = params;
       const resolved = await resolveContentInput(client, { inline: csv, file: csvFile, uploadId: csvUploadId }, { inline: "csv", file: "csvFile", upload: "csvUploadId" });
       if (!resolved.ok) return formatResult(resolved.error);
       if (resolved.value === undefined && !learners) {
         return formatResult({ ok: false, status: 0, data: { error: "Provide learners, csv, csvFile or csvUploadId" } });
       }
-      const body: Record<string, unknown> = { sendWelcomeAt: when, sendEmail };
+      const body: Record<string, unknown> = { sendWelcomeAt: when, sendEmail, cohortId };
       if (resolved.value !== undefined) body.csv = resolved.value;
       else body.rows = learners;
       const result = await client.post(`/courses/${courseId}/learners/import`, body);
@@ -98,6 +102,7 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
     {
       id: z.string().describe("Enrollment ID (required)"),
       status: z.enum(["active", "revoked", "pending", "completed"]).optional().describe("New status"),
+      cohortId: z.string().nullable().optional().describe("Move to this cohort (null = no cohort); progress is kept"),
       name: z.string().optional().describe("Learner's name"),
       firm: z.string().optional().describe("Learner's firm or team (empty string clears it)"),
     },

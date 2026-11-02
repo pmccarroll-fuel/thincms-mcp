@@ -32,6 +32,7 @@ import { registerLessonTools } from "./lessons.js";
 import { registerQuizTools } from "./quizzes.js";
 import { registerWorkbookTools } from "./workbooks.js";
 import { registerEnrollmentTools } from "./enrollments.js";
+import { registerCohortTools } from "./cohorts.js";
 import { registerSubscriberTools } from "./subscribers.js";
 import { registerLeadMagnetTools } from "./lead-magnets.js";
 import { registerIntegrationTools } from "./integrations.js";
@@ -93,6 +94,7 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   registerQuizTools(server, client);
   registerWorkbookTools(server, client);
   registerEnrollmentTools(server, client);
+  registerCohortTools(server, client);
   registerSubscriberTools(server, client);
   registerLeadMagnetTools(server, client);
   registerIntegrationTools(server, client);
