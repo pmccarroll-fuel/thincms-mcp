@@ -109,7 +109,7 @@ export function registerChatTools(server: McpServer, client: ThinCMSClient) {
       guardrails: z.array(z.object({ topic: z.string(), instruction: z.string().optional() })).optional().describe("Topics the assistant must not advise on; it offers a handover instead."),
       tone: z.string().optional(),
       businessHours: z.array(z.object({ dayOfWeek: z.array(z.string()), opens: z.string(), closes: z.string() })).nullable().optional().describe("null = use the site's LocalBusiness opening hours."),
-      handoverWording: z.string().optional().describe("{when} is replaced with the next business-hours window."),
+      handoverWording: z.string().optional().describe("Used above the message form and whenever the assistant offers to take a message. {when} is replaced with the next business-hours window; without it, no reply time is quoted."),
       bookingUrl: z.string().nullable().optional(),
       notifyEmails: z.array(z.string()).optional(),
       telegramChatId: z.string().nullable().optional(),
