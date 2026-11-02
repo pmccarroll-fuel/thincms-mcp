@@ -88,6 +88,7 @@ export function registerChatTools(server: McpServer, client: ThinCMSClient) {
     "Update chat assistant settings. Partial update — only fields you pass change. JSON-shaped fields replace the whole value (send the full object/array). Editors and API keys can change wording, appearance, starter questions, excluded paths, sources, guardrails, tone, hours, booking URL and privacy link; enabled, notifyEmails, telegram*, webhookUrl, model, caps and retention need an admin.",
     {
       enabled: z.boolean().optional().describe("Show the widget on the public site."),
+      offerNewsletter: z.boolean().optional().describe("Show the 'send me news' tick-box on the message form (creates a subscriber and syncs to the CRM). Default false."),
       appearance: z.object({
         position: z.enum(["bottom-right", "bottom-left"]).optional(),
         primaryColor: z.string().optional(),
@@ -105,6 +106,7 @@ export function registerChatTools(server: McpServer, client: ThinCMSClient) {
         pages: z.object({ excludeIds: z.array(z.string()) }).optional(),
         collections: z.record(z.boolean()).optional().describe("collectionId → included. FAQ collections default to included."),
         posts: z.boolean().optional(),
+        forms: z.object({ excludeIds: z.array(z.string()) }).optional().describe("Forms the assistant may NOT fill in inside the chat. Every enabled fields-mode form is fillable by default."),
       }).optional(),
       guardrails: z.array(z.object({ topic: z.string(), instruction: z.string().optional() })).optional().describe("Topics the assistant must not advise on; it offers a handover instead."),
       tone: z.string().optional(),
