@@ -192,7 +192,7 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
     "Export a single learner's workbook response as PDF or Markdown. Locally, pass outputPath to write the file to disk (required for PDF; recommended for Markdown); without outputPath, Markdown is returned inline. On the hosted server outputPath is ignored: PDFs come back as an attached resource and Markdown inline.",
     {
       workbookId: z.string().describe("Workbook ID (required)"),
-      userId: z.string().describe("Learner user ID (required)"),
+      memberId: z.string().describe("Learner member ID (required) — `member.id` from thincms_list_enrollments or `memberId` from a workbook response"),
       format: z.enum(["pdf", "markdown"]).describe("Output format"),
       outputPath: z.string().optional().describe("Local file path to write the export to. Required for PDF."),
       asDownload: AS_DOWNLOAD_FIELD,
@@ -206,15 +206,15 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
         });
       }
       const raw = await client.getRaw(
-        `/workbooks/${params.workbookId}/responses/${params.userId}/export`,
+        `/workbooks/${params.workbookId}/responses/${params.memberId}/export`,
         { format: params.format },
       );
       if (!raw.ok) return formatResult(raw);
       if (params.asDownload) {
-        return downloadLinks(client, [{ filename: raw.filename || `workbook-${params.workbookId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
+        return downloadLinks(client, [{ filename: raw.filename || `workbook-${params.workbookId}-${params.memberId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
       }
       if (client.isRemote()) {
-        return deliverRemote(raw, `workbook-${params.workbookId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`);
+        return deliverRemote(raw, `workbook-${params.workbookId}-${params.memberId}.${params.format === "pdf" ? "pdf" : "md"}`);
       }
       if (params.outputPath) {
         const saved = await saveBytesTo(params.outputPath, raw.bytes);
@@ -236,7 +236,7 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
     "Export a learner's full course portfolio (every workbook in module order) as PDF or Markdown. Locally, pass outputPath for PDF (required) or to save the Markdown to disk. On the hosted server outputPath is ignored: PDFs come back as an attached resource and Markdown inline.",
     {
       courseId: z.string().describe("Course ID (required)"),
-      userId: z.string().describe("Learner user ID (required)"),
+      memberId: z.string().describe("Learner member ID (required) — `member.id` from thincms_list_enrollments or `memberId` from a workbook response"),
       format: z.enum(["pdf", "markdown"]).describe("Output format"),
       outputPath: z.string().optional().describe("Local file path to write the export to. Required for PDF."),
       asDownload: AS_DOWNLOAD_FIELD,
@@ -250,15 +250,15 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
         });
       }
       const raw = await client.getRaw(
-        `/courses/${params.courseId}/portfolio/${params.userId}/export`,
+        `/courses/${params.courseId}/portfolio/${params.memberId}/export`,
         { format: params.format },
       );
       if (!raw.ok) return formatResult(raw);
       if (params.asDownload) {
-        return downloadLinks(client, [{ filename: raw.filename || `portfolio-${params.courseId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
+        return downloadLinks(client, [{ filename: raw.filename || `portfolio-${params.courseId}-${params.memberId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
       }
       if (client.isRemote()) {
-        return deliverRemote(raw, `portfolio-${params.courseId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`);
+        return deliverRemote(raw, `portfolio-${params.courseId}-${params.memberId}.${params.format === "pdf" ? "pdf" : "md"}`);
       }
       if (params.outputPath) {
         const saved = await saveBytesTo(params.outputPath, raw.bytes);

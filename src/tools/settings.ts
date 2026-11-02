@@ -63,4 +63,22 @@ export function registerSettingsTools(server: McpServer, client: ThinCMSClient) 
       return formatResult(result);
     }
   );
+
+  siteAwareTool(server, client,
+    "thincms_test_smtp",
+    "Check the site's email (SMTP) settings without saving anything: connects, signs in, and sends a test message. Omitted fields use the saved settings, so with no arguments it tests what is saved. Returns one result per step with the server's own error and a likely fix. Run this before relying on course invitations, sign-up or password-reset emails. Admin only.",
+    {
+      testTo: z.string().optional().describe("Address to send the test message to (default: your sign-in email)"),
+      host: z.string().optional().describe("SMTP host to try instead of the saved one"),
+      port: z.number().int().optional().describe("SMTP port (587 STARTTLS or 465 SSL)"),
+      user: z.string().optional().describe("SMTP username"),
+      pass: z.string().optional().describe("SMTP password (for Gmail, an app password)"),
+      fromEmail: z.string().optional().describe("From address (must be allowed for the SMTP account, e.g. a Gmail 'Send mail as' alias)"),
+      fromName: z.string().optional().describe("From display name"),
+    },
+    async (params) => {
+      const result = await client.post("/settings/smtp/test", { ...params, save: false });
+      return formatResult(result);
+    }
+  );
 }

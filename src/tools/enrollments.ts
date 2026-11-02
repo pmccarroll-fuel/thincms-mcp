@@ -1,38 +1,47 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ThinCMSClient } from "../client.js";
-import { formatResult, siteAwareTool } from "../helpers.js";
+import { formatResult, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY } from "../helpers.js";
+
+// Learners are per-site member accounts. Enrolling an email that has no
+// account creates one and sends a welcome email with a set-password link.
+
+const sendWelcomeAt = z.string().optional().describe(
+  "ISO date-time to hold the welcome email until (e.g. to land with a pre-start sequence). Omit to send now.",
+);
 
 export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient) {
-  siteAwareTool(server, client, 
+  siteAwareTool(server, client,
     "thincms_list_enrollments",
-    "List course enrollments with optional filters. Returns enrollments with user and course details.",
+    "List course enrollments. Each has `member` (id, email, name, firm, hasSignedIn, canSignIn), course, status and welcome-email state (welcomeEmailSentAt / welcomeEmailScheduledFor / welcomeEmailError). Also returns `firms` for grouping.",
     {
       courseId: z.string().optional().describe("Filter by course ID"),
       status: z.enum(["pending", "active", "revoked", "completed"]).optional().describe("Filter by enrollment status"),
+      firm: z.string().optional().describe("Filter by the learner's firm/team"),
+      search: z.string().optional().describe("Search learner email or name"),
       page: z.number().int().positive().optional().describe("Page number (default: 1)"),
-      limit: z.number().int().positive().max(100).optional().describe("Items per page (default: 50)"),
+      limit: z.number().int().positive().max(500).optional().describe("Items per page (default: 50)"),
     },
     async (params) => {
       const queryParams: Record<string, string> = {};
-      if (params.courseId) queryParams.courseId = params.courseId;
-      if (params.status) queryParams.status = params.status;
-      if (params.page) queryParams.page = String(params.page);
-      if (params.limit) queryParams.limit = String(params.limit);
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined) queryParams[k] = String(v);
+      }
       const result = await client.get("/enrollments", queryParams);
       return formatResult(result);
     }
   );
 
-  siteAwareTool(server, client, 
+  siteAwareTool(server, client,
     "thincms_create_enrollment",
-    "Enroll a learner in a course. The user must already exist — specify by email or userId. This bypasses payment requirements, effectively creating a free/invite enrollment.",
+    "Enrol a learner in a course by email, without payment. The person does not need an account: one is created and they get a welcome email with a link to set their password (valid 14 days), which signs them in and opens the course. Existing members get a 'go to course' email. Re-enrolling someone already enrolled changes nothing except name/firm. The response's welcomeEmail says whether the email was sent, scheduled or failed (e.g. email not configured — check with thincms_test_smtp).",
     {
       courseId: z.string().describe("Course ID (required)"),
-      email: z.string().optional().describe("Learner's email address (looks up existing user)"),
-      userId: z.string().optional().describe("User ID (alternative to email)"),
-      status: z.enum(["active", "pending"]).optional().describe("Enrollment status (default: active)"),
-      source: z.string().optional().describe("Enrollment source label (default: invite)"),
+      email: z.string().describe("Learner's email address (required)"),
+      name: z.string().optional().describe("Learner's name"),
+      firm: z.string().optional().describe("Learner's firm or team, for grouping seats from one organisation"),
+      sendWelcomeAt,
+      sendEmail: z.boolean().optional().describe("Set false to enrol without any welcome email (default true)"),
     },
     async (params) => {
       const result = await client.post("/enrollments", params);
@@ -40,12 +49,57 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  siteAwareTool(server, client, 
+  siteAwareTool(server, client,
+    "thincms_import_learners",
+    "Bulk-enrol learners in a course (one row per seat). Same behaviour as thincms_create_enrollment for each row. Give either `learners` (array) or a CSV with a header row containing `email` and optionally `name` and `firm` (as csv, csvFile or csvUploadId). Returns a summary plus per-row results and errors. Max 500 rows per call.",
+    {
+      courseId: z.string().describe("Course ID (required)"),
+      learners: z.array(z.object({
+        email: z.string(),
+        name: z.string().optional(),
+        firm: z.string().optional(),
+      })).optional().describe("Learners to enrol"),
+      csv: z.string().optional().describe("CSV text with a header row (email, name, firm)"),
+      csvFile: z.string().optional().describe("Local path to the CSV" + LOCAL_ONLY),
+      csvUploadId: uploadIdField("the CSV"),
+      sendWelcomeAt,
+      sendEmail: z.boolean().optional().describe("Set false to enrol without welcome emails (default true)"),
+    },
+    async (params) => {
+      const { courseId, learners, csv, csvFile, csvUploadId, sendWelcomeAt: when, sendEmail } = params;
+      const resolved = await resolveContentInput(client, { inline: csv, file: csvFile, uploadId: csvUploadId }, { inline: "csv", file: "csvFile", upload: "csvUploadId" });
+      if (!resolved.ok) return formatResult(resolved.error);
+      if (resolved.value === undefined && !learners) {
+        return formatResult({ ok: false, status: 0, data: { error: "Provide learners, csv, csvFile or csvUploadId" } });
+      }
+      const body: Record<string, unknown> = { sendWelcomeAt: when, sendEmail };
+      if (resolved.value !== undefined) body.csv = resolved.value;
+      else body.rows = learners;
+      const result = await client.post(`/courses/${courseId}/learners/import`, body);
+      return formatResult(result);
+    }
+  );
+
+  siteAwareTool(server, client,
+    "thincms_resend_enrollment_invite",
+    "Send the welcome email for an active enrollment again now. Learners who haven't set a password get a fresh 14-day set-password link.",
+    {
+      id: z.string().describe("Enrollment ID"),
+    },
+    async (params) => {
+      const result = await client.post(`/enrollments/${params.id}/resend-invite`, {});
+      return formatResult(result);
+    }
+  );
+
+  siteAwareTool(server, client,
     "thincms_update_enrollment",
-    "Update an enrollment status. Use to approve pending enrollments or revoke access.",
+    "Update an enrollment: approve a pending request (status active — this emails the learner), revoke or reinstate access, or change the learner's name/firm.",
     {
       id: z.string().describe("Enrollment ID (required)"),
-      status: z.enum(["active", "revoked"]).describe("New status (required)"),
+      status: z.enum(["active", "revoked", "pending", "completed"]).optional().describe("New status"),
+      name: z.string().optional().describe("Learner's name"),
+      firm: z.string().optional().describe("Learner's firm or team (empty string clears it)"),
     },
     async (params) => {
       const { id, ...body } = params;
@@ -54,9 +108,9 @@ export function registerEnrollmentTools(server: McpServer, client: ThinCMSClient
     }
   );
 
-  siteAwareTool(server, client, 
+  siteAwareTool(server, client,
     "thincms_delete_enrollment",
-    "Delete an enrollment permanently.",
+    "Delete an enrollment permanently (the learner's member account is kept).",
     {
       id: z.string().describe("Enrollment ID"),
     },
