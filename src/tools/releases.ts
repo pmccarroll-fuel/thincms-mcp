@@ -37,10 +37,10 @@ export function registerReleaseTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client,
     "thincms_stage_release_item",
-    "Stage a change directly into a release (low-level; the normal write tools with releaseId are usually easier). data may be partial — it is merged over the item's staged or live state and validated like a live write. For collections, data.items is the full item list.",
+    "Stage a change directly into a release (low-level; the normal write tools with releaseId are usually easier). data may be partial — it is merged over the item's staged or live state and validated like a live write. For collections, data.items is the full item list. Course content: courseModule (courseId, title, description, content, sortOrder), lesson (moduleId, slug, title, contentBefore, description = content after the video, videoEmbed, videoPlatform, …), quiz (… plus questions: [{ questionText, options: string[2-5], correctIndex, explanation }] — the full list), workbook (… plus fields: the full field array). A new lesson/quiz/workbook may use a staged module's \"new:…\" key as moduleId. Learners keep seeing the live course until the release is published; preview it in the admin course preview (release picker).",
     {
       releaseId: z.string().describe("Release id"),
-      entityType: z.enum(["page", "post", "template", "navigation", "contentBlock", "collection"]),
+      entityType: z.enum(["page", "post", "template", "navigation", "contentBlock", "collection", "courseModule", "lesson", "quiz", "workbook"]),
       entityKey: z.string().optional().describe('Live item id, or a staged "new:…" key. Omit to create a new item. Not needed for template/navigation.'),
       action: z.enum(["create", "update", "delete"]).optional().describe("Default: update when entityKey is given, otherwise create"),
       data: z.record(z.any()).optional().describe("Fields to set (omit for delete)"),
@@ -53,7 +53,7 @@ export function registerReleaseTools(server: McpServer, client: ThinCMSClient) {
     "Remove one item from a release.",
     {
       releaseId: z.string().describe("Release id"),
-      entityType: z.enum(["page", "post", "template", "navigation", "contentBlock", "collection"]),
+      entityType: z.enum(["page", "post", "template", "navigation", "contentBlock", "collection", "courseModule", "lesson", "quiz", "workbook"]),
       entityKey: z.string().optional().describe("Item key as shown by thincms_get_release (not needed for template/navigation)"),
     },
     async (params) => {

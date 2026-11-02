@@ -170,6 +170,12 @@ export const RELEASE_STAGEABLE_TOOLS = new Set([
   "thincms_create_collection", "thincms_update_collection", "thincms_delete_collection",
   "thincms_create_collection_item", "thincms_update_collection_item", "thincms_delete_collection_item",
   "thincms_reorder_collection_items",
+  // Course content (staged only with an explicit releaseId)
+  "thincms_create_module", "thincms_update_module", "thincms_delete_module",
+  "thincms_create_lesson", "thincms_update_lesson", "thincms_delete_lesson",
+  "thincms_create_quiz", "thincms_update_quiz", "thincms_delete_quiz",
+  "thincms_add_quiz_question", "thincms_update_quiz_question", "thincms_delete_quiz_question",
+  "thincms_create_workbook", "thincms_update_workbook", "thincms_delete_workbook",
 ]);
 
 const RELEASE_ID_FIELD = z.string().optional().describe(

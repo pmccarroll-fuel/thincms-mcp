@@ -6,7 +6,12 @@ import type { ThinCMSClient } from "../client.js";
 import { formatResult, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY, AS_DOWNLOAD_FIELD, downloadLinks } from "../helpers.js";
 
 const fieldsArraySchema = z.array(z.record(z.any())).describe(
-  "Ordered array of field definitions. Each field is an object with at minimum { fieldId, type, label }. v1 field types: short_text, long_text, number, rating, select, multi_select, date, prompt_display, markdown_display. Input fields may include `prefillFrom: { courseSlug, workbookSlug, fieldId }` for cross-workbook references.",
+  "Ordered array of field definitions, each at minimum { fieldId, type, label }. fieldId: lowercase letters, numbers, - or _. " +
+  "Input types: short_text, long_text (rows), number, rating, select, multi_select, date, table. Display types: prompt_display (label, helpText, content, collapsible), markdown_display (content only — a label is dropped). " +
+  "select / multi_select: options MUST be objects [{ value, label }] (plain strings are rejected with 422). " +
+  "rating: { scale: 2-10 (default 5), scaleLabels? }; min/max are not supported and are dropped. " +
+  "table (alias repeating_group): { columns: [{ columnId, label, type: short_text|long_text|number|select|date|rating, required?, options? (select: [{ value, label }]), scale? (rating), width?: narrow|normal|wide }], minRows?, maxRows? (≤100), initialRows?, addRowLabel? }; the answer is an array of row objects keyed by columnId. " +
+  "Any input field: required?, helpText?, placeholder?, private? (true = only the learner sees the answer; hidden from admin views, admin exports and CSVs, kept in the learner's own export), prefillFrom? { courseSlug, workbookSlug, fieldId } to carry an earlier answer forward (works for tables too: the rows are copied).",
 );
 
 async function resolveFields(
