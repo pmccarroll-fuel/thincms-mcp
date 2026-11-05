@@ -77,11 +77,11 @@ export function registerCohortTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client,
     "thincms_set_cohort_release_schedule",
-    "Set when modules/items open for cohort learners, relative to each cohort's calendar. anchor 'session' + sessionNumber + offsetDays (negative = before, 0 = at the session's start time; items open at the session's time of day), or anchor 'start' + offsetDays after the cohort start. A module rule applies to its items unless an item has its own. anchor null removes a rule. mode 'replace' (default) replaces all rules; 'merge' changes only those given. Items without any rule open on enrolment.",
+    "Set when modules/items open for cohort learners, relative to each cohort's calendar. anchor 'session' + sessionNumber + offsetDays (negative = before, 0 = at the session's start time; items open at the session's time of day), or anchor 'start' + offsetDays after the cohort start. A module rule applies to its items unless an item has its own; a section rule (itemType 'section') applies to the modules and items in it that have no closer rule. anchor null removes a rule. mode 'replace' (default) replaces all rules; 'merge' changes only those given. Items without any rule open on enrolment.",
     {
       courseId: z.string().describe("Course ID"),
       rules: z.array(z.object({
-        itemType: z.enum(["module", "lesson", "quiz", "workbook"]),
+        itemType: z.enum(["section", "module", "lesson", "quiz", "workbook"]),
         itemId: z.string(),
         anchor: z.enum(["session", "start"]).nullable(),
         sessionNumber: z.number().int().positive().nullable().optional(),
@@ -94,10 +94,10 @@ export function registerCohortTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client,
     "thincms_set_cohort_release_override",
-    "Exception for one module or item in one cohort: a different release time (releaseAt), or unlocked now (unlocked: true). Send neither to remove the override and go back to the course rule.",
+    "Exception for one section, module or item in one cohort: a different release time (releaseAt), or unlocked now (unlocked: true). Send neither to remove the override and go back to the course rule.",
     {
       cohortId: z.string().describe("Cohort ID"),
-      itemType: z.enum(["module", "lesson", "quiz", "workbook"]),
+      itemType: z.enum(["section", "module", "lesson", "quiz", "workbook"]),
       itemId: z.string(),
       releaseAt: iso("Release time for this cohort").nullable().optional(),
       unlocked: z.boolean().optional(),
@@ -146,11 +146,12 @@ export function registerCohortTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client,
     "thincms_list_discussions",
-    "List lesson discussion threads with replies (newest first). Learners only see their own cohort's threads; this shows all. Filter by courseId, cohortId ('none' = no cohort) or lessonId.",
+    "List lesson and workbook discussion threads with replies (newest first). Each thread has itemType (lesson | workbook) and item. Learners only see their own cohort's threads; this shows all. Filter by courseId, cohortId ('none' = no cohort), lessonId or workbookId.",
     {
       courseId: z.string().optional(),
       cohortId: z.string().optional(),
       lessonId: z.string().optional(),
+      workbookId: z.string().optional(),
       limit: z.number().int().positive().max(500).optional(),
     },
     async (params) => {

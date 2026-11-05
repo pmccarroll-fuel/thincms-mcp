@@ -23,6 +23,7 @@ function lessonContentFields() {
     isFree: opt(z.boolean()).describe("Free preview lesson"),
     isUnlocked: opt(z.boolean()).describe("Manually unlock this lesson regardless of drip settings"),
     dripDate: opt(z.string()).describe("ISO date when this lesson becomes available (scheduled drip mode)"),
+    requiredForCompletion: opt(z.boolean()).describe("Counts toward course completion (default true). Set false for reference pages (start pages, reading, bonus): learners see no Mark complete and progress leaves the lesson out."),
   };
 }
 

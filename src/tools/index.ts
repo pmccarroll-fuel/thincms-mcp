@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ThinCMSClient } from "../client.js";
 import { recordToolName, runWithClient } from "../helpers.js";
@@ -54,14 +55,30 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   // The same interceptor binds each handler to this server's client via
   // runWithClient, so formatResult and the snapshot store see the right
   // session when many users share one hosted process.
-  const realTool = (server as any).tool.bind(server);
+  //
+  // Inputs are strict (CR 17): the raw zod shape becomes z.object(shape).strict(),
+  // registered through registerTool (the legacy tool() overload only accepts raw
+  // shapes, which the SDK turns into non-strict objects that silently drop unknown
+  // keys). An unknown parameter now fails with "Unrecognized key(s)" naming it.
+  const registerTool = (server as any).registerTool.bind(server);
   (server as any).tool = (name: string, ...rest: any[]) => {
     recordToolName(name);
-    const handler = rest[rest.length - 1];
-    if (typeof handler === "function") {
-      rest[rest.length - 1] = (...args: any[]) => runWithClient(client, () => handler(...args));
-    }
-    return realTool(name, ...rest);
+    const handler = rest.pop();
+    const bound = typeof handler === "function"
+      ? (...args: any[]) => runWithClient(client, () => handler(...args))
+      : handler;
+    const description = typeof rest[0] === "string" ? (rest.shift() as string) : undefined;
+    const shape = rest.length ? rest.shift() : undefined;
+    const annotations = rest.length ? rest.shift() : undefined;
+    return registerTool(
+      name,
+      {
+        ...(description !== undefined && { description }),
+        ...(shape !== undefined && { inputSchema: z.object(shape).strict() }),
+        ...(annotations !== undefined && { annotations }),
+      },
+      bound,
+    );
   };
 
   registerPostTools(server, client);
