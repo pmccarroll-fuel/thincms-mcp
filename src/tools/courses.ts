@@ -98,7 +98,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_create_module",
-    "Create a new module within a course. Modules are auto-ordered by creation sequence (within their section, if sectionId is given).",
+    "Create a new module within a course. New modules go last in the course (and so last in their section, if sectionId is given).",
     {
       courseId: z.string().describe("Course ID (required)"),
       title: z.string().describe("Module title (required)"),
@@ -146,7 +146,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_reorder_modules",
-    "Reorder modules within a course. Pass all module IDs in the desired order. When the course has sections, modules stay grouped by section (this sets their order within each section; reorder sections with thincms_reorder_sections).",
+    "Reorder modules within a course. Pass all module IDs in the desired order: this is the course order. Each section's modules stay together where its first module is; move whole sections with thincms_reorder_sections.",
     {
       courseId: z.string().describe("Course ID (required)"),
       moduleIds: z.array(z.string()).describe("Array of module IDs in desired order"),
@@ -181,7 +181,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client,
     "thincms_create_section",
-    "Create a course section: a group of modules shown to learners as a collapsible outline (one open at a time, opening on the section of the item they last viewed), with progress per section. Put modules in it with thincms_update_module (sectionId). Release rules can target a section (itemType \"section\" in thincms_set_cohort_release_schedule). Sections are written live (not staged in releases).",
+    "Create a course section: a group of modules shown to learners as a collapsible outline (one open at a time, opening on the section of the item they last viewed), with progress per section. Put modules in it with thincms_update_module (sectionId); grouping keeps the course order, and the section sits where its first module is. Release rules can target a section (itemType \"section\" in thincms_set_cohort_release_schedule). Sections are written live (not staged in releases).",
     {
       courseId: z.string().describe("Course ID (required)"),
       title: z.string().describe("Section title, e.g. \"Session 1 · Belt 1\" (required)"),
