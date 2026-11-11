@@ -14,7 +14,8 @@ const session = z.object({
   number: z.number().int().positive().optional().describe("Session number (default: position in the list, from 1)"),
   title: z.string().nullable().optional(),
   startsAt: iso("Session start"),
-  endsAt: iso("Session end").nullable().optional(),
+  endsAt: iso("Session end (needed for 'sessionEnd' release rules)").nullable().optional(),
+  timezone: z.string().nullable().optional().describe("IANA time zone for this session, e.g. America/Toronto; null/omitted = the cohort's. Learners see the session time in this zone, and release offsets keep its local clock time"),
   joinUrl: z.string().nullable().optional().describe("Live session link (Zoom etc.)"),
   recordingUrl: z.string().nullable().optional().describe("Recording link, added after the session"),
 });
@@ -77,13 +78,13 @@ export function registerCohortTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client,
     "thincms_set_cohort_release_schedule",
-    "Set when modules/items open for cohort learners, relative to each cohort's calendar. anchor 'session' + sessionNumber + offsetDays (negative = before, 0 = at the session's start time; items open at the session's time of day), or anchor 'start' + offsetDays after the cohort start. A module rule applies to its items unless an item has its own; a section rule (itemType 'section') applies to the modules and items in it that have no closer rule. anchor null removes a rule. mode 'replace' (default) replaces all rules; 'merge' changes only those given. Items without any rule open on enrolment.",
+    "Set when modules/items open for cohort learners, relative to each cohort's calendar. anchor 'session' + sessionNumber + offsetDays (negative = before, 0 = at the session's start time; items open at the session's time of day), anchor 'sessionEnd' + sessionNumber + offsetDays >= 0 (counts from the session's end time; 0 = as it finishes; the session needs endsAt or the item stays locked with a problem), or anchor 'start' + offsetDays after the cohort start. A module rule applies to its items unless an item has its own; a section rule (itemType 'section') applies to the modules and items in it that have no closer rule. anchor null removes a rule. mode 'replace' (default) replaces all rules; 'merge' changes only those given. Items without any rule open on enrolment.",
     {
       courseId: z.string().describe("Course ID"),
       rules: z.array(z.object({
         itemType: z.enum(["section", "module", "lesson", "quiz", "workbook"]),
         itemId: z.string(),
-        anchor: z.enum(["session", "start"]).nullable(),
+        anchor: z.enum(["session", "sessionEnd", "start"]).nullable(),
         sessionNumber: z.number().int().positive().nullable().optional(),
         offsetDays: z.number().int().optional().describe("Days relative to the anchor; negative = before"),
       })),
