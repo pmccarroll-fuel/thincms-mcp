@@ -140,7 +140,8 @@ export function registerReviewTools(server: McpServer, client: ThinCMSClient) {
         openaiApiKey: z.string().optional().describe("OpenAI key. Empty string clears."),
         anthropicApiKey: z.string().optional().describe("Anthropic key. Empty string clears."),
       }).optional(),
-      recipientUserIds: z.array(z.string()).optional().describe("Replace the list of users who receive the daily digest. Each ID must be an existing site user."),
+      recipientUserIds: z.array(z.string()).optional().describe("Replace the list of users who receive the daily digest. Each ID must be an existing site user (its `userId` in GET /api/v1/users)."),
+      recipientInvitationIds: z.array(z.string()).optional().describe("Replace the list of pending invitations (the `id` of an invitation in GET /api/v1/users, or `invitationId` from thincms_get_reviews_settings) whose email also receives the digest. Carried over to the user when they accept."),
     },
     async (params) => {
       const result = await client.put("/reviews/settings", params);
