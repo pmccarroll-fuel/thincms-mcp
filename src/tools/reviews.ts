@@ -131,7 +131,9 @@ export function registerReviewTools(server: McpServer, client: ThinCMSClient) {
         googleLocationId: z.string().optional().describe("Google Business Profile place ID."),
         outscraperApiKey: z.string().optional().describe("Outscraper API key. Empty string clears."),
         autoPost5Star: z.boolean().optional().describe("Auto-publish 5-star reviews when sentiment matches."),
-        syncTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("Daily sync time HH:mm in site's timezone."),
+        syncTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("Sync time HH:mm in site's timezone."),
+        syncFrequency: z.enum(["daily", "weekly"]).optional().describe("How often reviews sync automatically."),
+        syncWeekday: z.number().int().min(0).max(6).optional().describe("Weekly only: day to sync, 0=Sunday … 6=Saturday (site-local)."),
         backfillDays: z.number().int().min(1).max(365).optional().describe("How many days of history to fetch on first connect (1-365)."),
       }).optional(),
       ai: z.object({
