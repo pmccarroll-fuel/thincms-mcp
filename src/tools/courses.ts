@@ -51,6 +51,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
       priceAmountCents: z.number().int().optional().describe("Price in cents (for purchase mode)"),
       priceCurrency: z.string().optional().describe("Currency code (default: USD)"),
       autoNumbering: z.boolean().optional().describe("Automatic numbering in outlines: \"Module N:\", item numbers and \"Session N:\" (default true). Set false when titles carry their own labels, e.g. \"Belt 3 · Module 1: …\"."),
+      discussionNotifyEmails: z.string().nullable().optional().describe("Comma-separated instructor emails notified when a learner starts a discussion or replies. Empty/null = the site contact email. Learners are emailed about replies in their threads automatically (they can opt out)."),
     },
     async (params) => {
       const result = await client.post("/courses", params);
@@ -76,6 +77,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
       priceAmountCents: z.number().int().optional().describe("Price in cents"),
       priceCurrency: z.string().optional().describe("Currency code"),
       autoNumbering: z.boolean().optional().describe("Automatic numbering in outlines: \"Module N:\", item numbers and \"Session N:\" (default true). Set false when titles carry their own labels, e.g. \"Belt 3 · Module 1: …\"."),
+      discussionNotifyEmails: z.string().nullable().optional().describe("Comma-separated instructor emails notified when a learner starts a discussion or replies. Empty/null = the site contact email. Learners are emailed about replies in their threads automatically (they can opt out)."),
     },
     async (params) => {
       const { id, ...body } = params;

@@ -77,6 +77,33 @@ export function registerChatTools(server: McpServer, client: ThinCMSClient) {
   );
 
   siteAwareTool(server, client,
+    "thincms_chat_erase_person",
+    "Delete-on-request: find and delete one person's chat data by email and/or phone (phone matches on the last 8 digits, so 021… and +6421… match). Covers their handovers, the conversations behind them, and every other conversation from the same device (with messages and events). Without confirm it only previews; review the preview with the user, then call again with confirm: true. Also reports subscriber records and form submissions with that email, which this tool does not delete. Admin only; irreversible.",
+    {
+      email: z.string().optional(),
+      phone: z.string().optional(),
+      confirm: z.boolean().optional().describe("true deletes. Omit to preview first."),
+    },
+    async (body) => formatResult(await client.post("/chat/erase", body)),
+  );
+
+  siteAwareTool(server, client,
+    "thincms_chat_telegram_find_chats",
+    "List the Telegram chats that recently messaged the site's handover bot (people who pressed Start, groups it was added to), with their numeric chat IDs and whether each is already configured. Telegram keeps only ~24 hours of updates: if someone is missing, they must open the bot, press Start or send a message, then look again. Admin only.",
+    {},
+    async () => formatResult(await client.get("/chat/telegram")),
+  );
+
+  siteAwareTool(server, client,
+    "thincms_chat_telegram_test",
+    "Send a test Telegram message to each configured chat ID (or to chatIds if given) and report which ones worked. 'chat not found' means that person hasn't pressed Start on the bot or the ID is wrong. Admin only.",
+    {
+      chatIds: z.array(z.string()).max(10).optional().describe("Chat IDs to test instead of the saved ones."),
+    },
+    async (body) => formatResult(await client.post("/chat/telegram", body)),
+  );
+
+  siteAwareTool(server, client,
     "thincms_get_chat_settings",
     "Get the chat assistant settings plus status (AI provider connected, SMTP configured, Telegram token set), the collections and pages with whether each is a knowledge source, and suggested guardrails.",
     {},
@@ -115,7 +142,7 @@ export function registerChatTools(server: McpServer, client: ThinCMSClient) {
       handoverConfirmation: z.string().optional().describe("Shown in the chat after a message is sent. {name} = visitor's first name, {when} = next business-hours window."),
       bookingUrl: z.string().nullable().optional(),
       notifyEmails: z.array(z.string()).optional(),
-      telegramChatId: z.string().nullable().optional(),
+      telegramChatId: z.string().nullable().optional().describe("One or more numeric Telegram chat IDs, comma-separated (people: positive numbers; groups: -100…). Each person must press Start on the bot first; use thincms_chat_telegram_find_chats to get the IDs."),
       telegramBotToken: z.string().optional().describe("Write-only; stored as the TELEGRAM_BOT_TOKEN site secret. Empty string removes it."),
       webhookUrl: z.string().nullable().optional().describe("Receives a chat.handover event (e.g. n8n → SMS)."),
       followUpTargetHours: z.number().int().positive().nullable().optional(),

@@ -164,7 +164,7 @@ export function registerCohortTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client,
     "thincms_reply_discussion",
-    "Reply to a discussion thread as the instructor (shown with your name and '(instructor)'). Plain text, up to 5000 characters.",
+    "Reply to a discussion thread as the instructor (shown with your name and '(instructor)'). Plain text, up to 5000 characters. The learners in the thread are emailed about the reply (unless they opted out).",
     { threadId: z.string(), content: z.string() },
     async ({ threadId, content }) => formatResult(await client.post(`/discussions/${threadId}/replies`, { content })),
   );
