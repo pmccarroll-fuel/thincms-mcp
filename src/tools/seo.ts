@@ -29,15 +29,16 @@ export function registerSeoTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_seo_check_links",
-    "Scan published content for broken links. By default checks internal links only (fast). Set checkExternal=true to also verify external URLs via HEAD requests (slower, limited to 50 URLs). Optionally scope to a single post or page by providing type and id.",
+    "Scan published content for broken links. scope='internal' (default, fast) checks links to this site's pages and posts; scope='external' verifies only outbound URLs via HEAD requests (slower, up to 50 unique URLs); scope='all' does both. Each broken link reports its source page (title, path and full URL) and its target URL. Optionally limit to a single post or page by providing type and id.",
     {
-      checkExternal: z.boolean().optional().describe("Also check external URLs (slower). Default: false"),
+      scope: z.enum(["internal", "external", "all"]).optional().describe("Which links to check. Default: internal"),
+      checkExternal: z.boolean().optional().describe("Deprecated: same as scope='all'"),
       type: z.enum(["post", "page"]).optional().describe("Scope to a single content type"),
       id: z.string().optional().describe("Scope to a single post or page ID"),
     },
-    async ({ checkExternal, type, id }) => {
+    async ({ scope, checkExternal, type, id }) => {
       const params: Record<string, string> = {};
-      if (checkExternal) params.check = "true";
+      params.scope = scope ?? (checkExternal ? "all" : "internal");
       if (type && id) {
         params.type = type;
         params.id = id;
