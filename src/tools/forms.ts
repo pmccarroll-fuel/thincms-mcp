@@ -25,6 +25,7 @@ const integrationParams = {
   integrationListId: z.string().optional().describe("Override the default list (ActiveCampaign) or Workflow (GoHighLevel) for this form; empty string clears it"),
   integrationFieldMappings: z.array(fieldMappingSchema).nullable().optional().describe("Send submitted values to the contact as built-in fields, custom fields or tags. Replaces the whole list; [] or null clears it."),
   integrationNote: z.boolean().optional().describe("Add each submission as a note on the contact listing every submitted value"),
+  doubleOptIn: z.boolean().optional().describe("Require email confirmation: new subscribers get a confirmation link + 6-digit code, and are added to the list/sequence and unlock members content only after confirming. Recommended for the newsletter form; needs site SMTP."),
 };
 
 export function registerFormTools(server: McpServer, client: ThinCMSClient) {
