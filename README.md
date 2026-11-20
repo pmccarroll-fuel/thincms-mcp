@@ -4,7 +4,7 @@ MCP (Model Context Protocol) server for [ThinCMS](https://github.com/pmccarroll-
 
 ## What it does
 
-Wraps the ThinCMS REST API as **45 typed tools** that any MCP-compatible AI client can call directly. Instead of constructing HTTP requests, agents call tools like `thincms_create_post(title, content, status)` and get structured responses back.
+Wraps the ThinCMS REST API as **261 typed tools** that any MCP-compatible AI client can call directly. Instead of constructing HTTP requests, agents call tools like `thincms_create_post(title, content, status)` and get structured responses back.
 
 ## Connect to the hosted server (recommended)
 
@@ -79,6 +79,7 @@ Same configuration in `.claude/settings.json` or global Claude Code settings.
 | Submissions | `list_submissions`, `export_submissions_csv` |
 | Search | `search` |
 | Preview | `create_preview`, `get_preview_url` |
+| Documents | `list_document_types`, `get_document_type`, `create_document_type`, `update_document_type`, `create_document`, `update_document`, `preview_document`, `send_document`, `get_document`, `list_documents`, `list_document_events`, `resend_document`, `withdraw_document` |
 
 All tool names are prefixed with `thincms_` (e.g., `thincms_list_posts`).
 

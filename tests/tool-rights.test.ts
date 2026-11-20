@@ -13,6 +13,20 @@ describe("requiredLevel", () => {
     expect(requiredLevel("thincms_list_deleted")).toBe("view");
     expect(requiredLevel("thincms_get_settings")).toBe("view");
   });
+
+  it("documents tools: reads need view, the rest need edit", () => {
+    for (const n of ["thincms_list_document_types", "thincms_get_document_type", "thincms_get_document", "thincms_list_documents", "thincms_list_document_events"]) {
+      expect(requiredLevel(n), n).toBe("view");
+    }
+    for (const n of ["thincms_create_document_type", "thincms_update_document_type", "thincms_create_document", "thincms_update_document", "thincms_preview_document", "thincms_send_document", "thincms_resend_document", "thincms_withdraw_document"]) {
+      expect(requiredLevel(n), n).toBe("edit");
+    }
+    // "preview" as a write verb leaves the existing preview tools where they were.
+    expect(requiredLevel("thincms_get_preview_url")).toBe("view");
+    expect(requiredLevel("thincms_get_post_preview_url")).toBe("view");
+    expect(requiredLevel("thincms_get_release_preview_link")).toBe("view");
+    expect(requiredLevel("thincms_create_preview")).toBe("edit");
+  });
 });
 
 describe("allows", () => {
@@ -69,5 +83,21 @@ describe("session tool list (P-3)", () => {
     g.add("thincms_create_post", { enabled: true }, "content");
     expect(g.check("thincms_create_post", { content: "view" })).toEqual({ ok: false, module: "content", level: "edit" });
     expect(g.check("thincms_create_post", { content: "edit" })).toEqual({ ok: true });
+  });
+});
+
+import { isNonLiveDocumentPath } from "../src/client.js";
+describe("documents: levels and production-write exemptions", () => {
+  it("type changes need manage; documents edit only sees the rest", () => {
+    const g = new ToolGate();
+    for (const n of ["thincms_create_document_type", "thincms_update_document_type", "thincms_create_document", "thincms_list_document_types"]) g.add(n, { enabled: true }, "documents");
+    g.apply({ documents: "edit" });
+    expect(g.enabledNames().sort()).toEqual(["thincms_create_document", "thincms_list_document_types"]);
+    g.apply({ documents: "manage" });
+    expect(g.enabledNames()).toHaveLength(4);
+  });
+  it("drafts, previews and types skip the production confirmation; send/resend/withdraw don't", () => {
+    for (const p of ["/documents", "/documents/abc", "/documents/abc/preview", "/document-types", "/document-types/letter"]) expect(isNonLiveDocumentPath(p), p).toBe(true);
+    for (const p of ["/documents/abc/send", "/documents/abc/resend", "/documents/abc/withdraw", "/pages", "/documents/abc/void"]) expect(isNonLiveDocumentPath(p), p).toBe(false);
   });
 });

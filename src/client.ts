@@ -176,7 +176,7 @@ export class ThinCMSClient {
     const override = getCurrentOverride();
     // Staging into a release, and release bookkeeping, change nothing live.
     // Publishing / scheduling a release still needs confirmation.
-    if (override?.releaseId || (path && isNonLiveReleasePath(path))) return null;
+    if (override?.releaseId || (path && (isNonLiveReleasePath(path) || isNonLiveDocumentPath(path)))) return null;
     const targetSiteId = override?.siteId ?? this.siteId;
     if (!this.isProductionSite(targetSiteId)) return null;
     if (override?.confirmProductionWrite === true) return null;
@@ -185,6 +185,15 @@ export class ThinCMSClient {
     const reason = this.productionSiteIds.has(targetSiteId)
       ? "it is in THINCMS_PRODUCTION_SITE_IDS"
       : "the site is live";
+    if (path && /^\/documents\//.test(path)) {
+      return {
+        ok: false,
+        status: 403,
+        data: {
+          error: `This would email or cut off a real recipient on production site ${label} (${reason}). Make sure a person approved the preview (thincms_preview_document), then re-call with confirmProductionWrite: true.`,
+        },
+      };
+    }
     return {
       ok: false,
       status: 403,
@@ -581,6 +590,20 @@ export function isPrivateAddress(address: string): boolean {
 }
 
 /** Release endpoints that don't change the live site (everything except publish/schedule). */
+/**
+ * Document drafts, previews and types reach no one, so they don't need the
+ * production-write confirmation. Sending, resending and withdrawing do: they
+ * email or cut off a real recipient.
+ */
+export function isNonLiveDocumentPath(path: string): boolean {
+  const p = path.split('?')[0];
+  if (/^\/document-types(\/[^/]+)?$/.test(p)) return true;
+  if (/^\/documents$/.test(p)) return true;               // create draft
+  if (/^\/documents\/[^/]+$/.test(p)) return true;         // update draft
+  if (/^\/documents\/[^/]+\/preview$/.test(p)) return true;
+  return false;
+}
+
 export function isNonLiveReleasePath(path: string): boolean {
   return /^\/releases(\/|$|\?)/.test(path) && !/\/(publish|schedule)(\?|$)/.test(path);
 }

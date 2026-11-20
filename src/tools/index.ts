@@ -47,6 +47,7 @@ import { registerVersionTools } from "./versions.js";
 import { registerReleaseTools } from "./releases.js";
 import { registerUploadTools } from "./uploads.js";
 import { registerUserTools } from "./users.js";
+import { registerDocumentTools } from "./documents.js";
 
 // Module each tool file belongs to (P-3). null = always available.
 // Tools registered while `currentModule` is set are gated on that module.
@@ -148,6 +149,7 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient): Tool
   inModule("content", () => registerVersionTools(server, client));
   inModule("content", () => registerReleaseTools(server, client));
   inModule("administration", () => registerUserTools(server, client));
+  inModule("documents", () => registerDocumentTools(server, client));
   inModule(null, () => registerSnapshotTools(server, client));  // Snapshot/restore safety tools
   registerCapabilitiesTool(server, client, gate);  // Last — reads the populated registry
   return gate;

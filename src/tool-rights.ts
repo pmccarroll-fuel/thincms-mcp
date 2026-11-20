@@ -25,6 +25,8 @@ const WRITE_VERBS = [
   "generate", "reorder", "move", "enroll", "add", "set", "clear", "pause", "reply",
   "resend", "sync", "re_analyze", "upload", "prepare_upload", "revoke", "erase", "test",
   "withdraw", "void",
+  // Previewing a document issues a preview link: a POST that needs Documents edit.
+  "preview",
 ];
 
 export function requiredLevel(toolName: string): Level {
@@ -39,6 +41,12 @@ export function requiredLevel(toolName: string): Level {
   }
   return "view";
 }
+
+// Tools that need more than their verb implies (the API checks the same).
+const LEVEL_OVERRIDES: Record<string, Level> = {
+  thincms_create_document_type: "manage",
+  thincms_update_document_type: "manage",
+};
 
 // Tools whose module differs from their file's.
 const MODULE_OVERRIDES: Record<string, Module> = {
@@ -64,7 +72,7 @@ export class ToolGate {
   private notify: (() => void) | null = null;
 
   add(name: string, tool: { enabled: boolean }, module: Module | null): void {
-    this.tools.set(name, { tool, module: MODULE_OVERRIDES[name] ?? module, level: requiredLevel(name) });
+    this.tools.set(name, { tool, module: MODULE_OVERRIDES[name] ?? module, level: LEVEL_OVERRIDES[name] ?? requiredLevel(name) });
   }
 
   /** Called once the server can send notifications. */

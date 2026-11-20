@@ -34,4 +34,21 @@ describe("strict tool inputs", () => {
       expect(tools[n], n).toBeDefined();
     }
   });
+
+  it("registers the documents tools with strict recipient objects", () => {
+    for (const n of [
+      "thincms_list_document_types", "thincms_get_document_type", "thincms_create_document_type", "thincms_update_document_type",
+      "thincms_create_document", "thincms_update_document", "thincms_preview_document", "thincms_send_document",
+      "thincms_get_document", "thincms_list_documents", "thincms_list_document_events", "thincms_resend_document", "thincms_withdraw_document",
+    ]) {
+      expect(tools[n], n).toBeDefined();
+    }
+    const create = tools["thincms_create_document"].inputSchema;
+    const base = { type: "engagement", title: "Letter", html: "<!doctype html><html><body>x</body></html>", confirmProductionWrite: true };
+    expect(create.safeParse({ ...base, recipients: [{ name: "Ann", email: "ann@example.com" }, { name: "Bo", email: "bo@example.com", role: "cc" }] }).success).toBe(true);
+    expect(create.safeParse({ ...base, recipients: [{ name: "Ann", email: "ann@example.com", phone: "1" }] }).success).toBe(false);
+    expect(create.safeParse({ ...base, recipients: [] }).success).toBe(false);
+    expect(create.safeParse({ ...base, recipients: [{ name: "Ann", email: "ann@example.com" }], authMethod: "sms" }).success).toBe(false);
+    expect(tools["thincms_void_document"]).toBeUndefined();
+  });
 });
