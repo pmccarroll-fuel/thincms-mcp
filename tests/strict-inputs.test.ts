@@ -40,6 +40,7 @@ describe("strict tool inputs", () => {
       "thincms_list_document_types", "thincms_get_document_type", "thincms_create_document_type", "thincms_update_document_type",
       "thincms_create_document", "thincms_update_document", "thincms_preview_document", "thincms_send_document",
       "thincms_get_document", "thincms_list_documents", "thincms_list_document_events", "thincms_resend_document", "thincms_withdraw_document",
+      "thincms_void_document", "thincms_get_signed_copy",
     ]) {
       expect(tools[n], n).toBeDefined();
     }
@@ -49,6 +50,34 @@ describe("strict tool inputs", () => {
     expect(create.safeParse({ ...base, recipients: [{ name: "Ann", email: "ann@example.com", phone: "1" }] }).success).toBe(false);
     expect(create.safeParse({ ...base, recipients: [] }).success).toBe(false);
     expect(create.safeParse({ ...base, recipients: [{ name: "Ann", email: "ann@example.com" }], authMethod: "sms" }).success).toBe(false);
-    expect(tools["thincms_void_document"]).toBeUndefined();
+  });
+
+  it("accepts priced items on create and update, and rejects unknown item keys", () => {
+    const base = { type: "engagement", title: "Letter", html: "<!doctype html><html><body>x</body></html>", recipients: [{ name: "Ann", email: "ann@example.com" }] };
+    const items = [
+      { id: "package", label: "Monthly package", recurrence: "monthly", price: 450, taxRate: 13 },
+      { id: "startup", label: "Start-up fee", price: 1500 },
+      { id: "instalments", label: "Pay the start-up fee in instalments", kind: "optional", price: 0 },
+      { id: "coaching-none", label: "No coaching", kind: "choice", group: "coaching", price: 0, default: true },
+      { id: "coaching-quarterly", label: "Quarterly coaching", kind: "choice", group: "coaching", recurrence: "quarterly", price: 150, taxRate: 13 },
+      { id: "coaching-monthly", label: "Monthly coaching", kind: "choice", group: "coaching", recurrence: "monthly", price: 300.5, taxRate: 13 },
+    ];
+    const create = tools["thincms_create_document"].inputSchema;
+    expect(create.safeParse({ ...base, items, currency: "CAD", groups: { coaching: "Coaching" } }).success).toBe(true);
+    const bad = create.safeParse({ ...base, items: [{ ...items[0], quantity: 2 }], currency: "CAD" });
+    expect(bad.success).toBe(false);
+    expect(JSON.stringify(bad.error.issues)).toContain("quantity");
+    expect(create.safeParse({ ...base, items: [{ ...items[0], price: 1.234 }], currency: "CAD" }).success).toBe(false);
+    expect(create.safeParse({ ...base, items: [{ ...items[0], kind: "bundle" }], currency: "CAD" }).success).toBe(false);
+    expect(create.safeParse({ ...base, items, currency: "cad" }).success).toBe(false);
+    const update = tools["thincms_update_document"].inputSchema;
+    expect(update.safeParse({ id: "d1", items: [], currency: "NZD" }).success).toBe(true);
+    expect(update.safeParse({ id: "d1", items: [{ id: "x", label: "X", price: 1, colour: "red" }] }).success).toBe(false);
+  });
+
+  it("void needs a reason; signed copy takes only the id", () => {
+    expect(tools["thincms_void_document"].inputSchema.safeParse({ id: "d1", reason: "Signed by mistake" }).success).toBe(true);
+    expect(tools["thincms_void_document"].inputSchema.safeParse({ id: "d1" }).success).toBe(false);
+    expect(tools["thincms_get_signed_copy"].inputSchema.safeParse({ id: "d1" }).success).toBe(true);
   });
 });

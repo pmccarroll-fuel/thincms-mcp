@@ -15,12 +15,14 @@ describe("requiredLevel", () => {
   });
 
   it("documents tools: reads need view, the rest need edit", () => {
-    for (const n of ["thincms_list_document_types", "thincms_get_document_type", "thincms_get_document", "thincms_list_documents", "thincms_list_document_events"]) {
+    for (const n of ["thincms_list_document_types", "thincms_get_document_type", "thincms_get_document", "thincms_list_documents", "thincms_list_document_events", "thincms_get_signed_copy"]) {
       expect(requiredLevel(n), n).toBe("view");
     }
-    for (const n of ["thincms_create_document_type", "thincms_update_document_type", "thincms_create_document", "thincms_update_document", "thincms_preview_document", "thincms_send_document", "thincms_resend_document", "thincms_withdraw_document"]) {
+    for (const n of ["thincms_create_document_type", "thincms_update_document_type", "thincms_create_document", "thincms_update_document", "thincms_preview_document", "thincms_send_document", "thincms_resend_document", "thincms_withdraw_document", "thincms_void_document"]) {
       expect(requiredLevel(n), n).toBe("edit");
     }
+    expect(requiredLevel("thincms_void_document")).toBe("edit");
+    expect(requiredLevel("thincms_get_signed_copy")).toBe("view");
     // "preview" as a write verb leaves the existing preview tools where they were.
     expect(requiredLevel("thincms_get_preview_url")).toBe("view");
     expect(requiredLevel("thincms_get_post_preview_url")).toBe("view");
@@ -96,8 +98,23 @@ describe("documents: levels and production-write exemptions", () => {
     g.apply({ documents: "manage" });
     expect(g.enabledNames()).toHaveLength(4);
   });
+  it("void is not exempt from the production confirmation", () => {
+    expect(isNonLiveDocumentPath("/documents/x/void")).toBe(false);
+  });
   it("drafts, previews and types skip the production confirmation; send/resend/withdraw don't", () => {
     for (const p of ["/documents", "/documents/abc", "/documents/abc/preview", "/document-types", "/document-types/letter"]) expect(isNonLiveDocumentPath(p), p).toBe(true);
     for (const p of ["/documents/abc/send", "/documents/abc/resend", "/documents/abc/withdraw", "/pages", "/documents/abc/void"]) expect(isNonLiveDocumentPath(p), p).toBe(false);
+  });
+});
+
+describe("void needs the documents.void grant (P-7)", () => {
+  it("is hidden without the grant and shown with it", () => {
+    const g = new ToolGate();
+    g.add("thincms_void_document", { enabled: true }, "documents");
+    g.add("thincms_get_signed_copy", { enabled: true }, "documents");
+    g.apply({ documents: "edit" });
+    expect(g.enabledNames()).toEqual(["thincms_get_signed_copy"]);
+    g.apply({ documents: "edit", grants: { "documents.void": true } });
+    expect(g.enabledNames().sort()).toEqual(["thincms_get_signed_copy", "thincms_void_document"]);
   });
 });

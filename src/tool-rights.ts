@@ -48,6 +48,11 @@ const LEVEL_OVERRIDES: Record<string, Level> = {
   thincms_update_document_type: "manage",
 };
 
+// Tools that also need a separately granted permission (P-7).
+const GRANT_REQUIRED: Record<string, string> = {
+  thincms_void_document: "documents.void",
+};
+
 // Tools whose module differs from their file's.
 const MODULE_OVERRIDES: Record<string, Module> = {
   thincms_go_live: "administration",
@@ -64,6 +69,13 @@ interface GatedTool {
   tool: { enabled: boolean };
   module: Module | null;
   level: Level;
+  grant?: string;
+}
+
+function permitted(rights: Rights | undefined, g: GatedTool): boolean {
+  if (!allows(rights, g.module, g.level)) return false;
+  if (g.grant && rights) return rights.grants?.[g.grant] === true;
+  return true;
 }
 
 /** Per-server record of every tool's module and required level. */
@@ -72,7 +84,7 @@ export class ToolGate {
   private notify: (() => void) | null = null;
 
   add(name: string, tool: { enabled: boolean }, module: Module | null): void {
-    this.tools.set(name, { tool, module: MODULE_OVERRIDES[name] ?? module, level: LEVEL_OVERRIDES[name] ?? requiredLevel(name) });
+    this.tools.set(name, { tool, module: MODULE_OVERRIDES[name] ?? module, level: LEVEL_OVERRIDES[name] ?? requiredLevel(name), grant: GRANT_REQUIRED[name] });
   }
 
   /** Called once the server can send notifications. */
@@ -83,7 +95,7 @@ export class ToolGate {
   /** May this tool run on a site with these rights? */
   check(name: string, rights: Rights | undefined): { ok: true } | { ok: false; module: Module; level: Level } {
     const g = this.tools.get(name);
-    if (!g || allows(rights, g.module, g.level)) return { ok: true };
+    if (!g || permitted(rights, g)) return { ok: true };
     return { ok: false, module: g.module!, level: g.level };
   }
 
@@ -91,7 +103,7 @@ export class ToolGate {
   apply(rights: Rights | undefined): void {
     let changed = false;
     for (const g of this.tools.values()) {
-      const enabled = allows(rights, g.module, g.level);
+      const enabled = permitted(rights, g);
       if (g.tool.enabled !== enabled) {
         g.tool.enabled = enabled;
         changed = true;
