@@ -52,6 +52,27 @@ export class ThinCMSClient {
     this.siteContextListener?.();
   }
 
+  /**
+   * Local API-key mode: ask ThinCMS for each key's module limits (P-4) so the
+   * tool list matches what the key can do. Sites whose server is too old to
+   * answer keep no rights, which lists every tool (the REST API still checks).
+   */
+  async loadApiKeyRights(): Promise<void> {
+    if (this.bearerToken) return;
+    let changed = false;
+    for (const site of this.sites) {
+      const key = site.apiKey ?? this.apiKey;
+      if (!key) continue;
+      const res = await this.request(this.url("/mcp/me"), {
+        method: "GET",
+        headers: { "X-API-Key": key, "X-Site-Id": site.siteId },
+      });
+      const rights = res.ok ? res.data?.sites?.[0]?.rights : undefined;
+      if (rights) { site.rights = rights; changed = true; }
+    }
+    if (changed) this.siteContextChanged();
+  }
+
   /** Rights for the active site (hosted mode); undefined in local API-key mode. */
   getActiveRights(): SiteProfile["rights"] {
     return this.sites.find((s) => s.siteId === this.siteId)?.rights;
