@@ -42,6 +42,21 @@ export class ThinCMSClient {
 
   // Hosted mode: refresh credentials and the permitted site list on every
   // request, so token refreshes and admin permission changes apply mid-session.
+  // Called whenever the active site or the user's rights may have changed,
+  // so the session's tool list can be re-gated (tool-rights.ts).
+  private siteContextListener: (() => void) | null = null;
+  onSiteContextChange(fn: () => void): void {
+    this.siteContextListener = fn;
+  }
+  private siteContextChanged(): void {
+    this.siteContextListener?.();
+  }
+
+  /** Rights for the active site (hosted mode); undefined in local API-key mode. */
+  getActiveRights(): SiteProfile["rights"] {
+    return this.sites.find((s) => s.siteId === this.siteId)?.rights;
+  }
+
   updateHostedAuth(bearerToken: string, sites: SiteProfile[]): void {
     this.bearerToken = bearerToken;
     this.sites = sites;
@@ -49,6 +64,7 @@ export class ThinCMSClient {
       this.siteId = sites[0].siteId;
       this.activeSiteName = sites[0].name;
     }
+    this.siteContextChanged();
   }
 
   /** Resolve a site by ID or (case-insensitive) name. */
@@ -81,6 +97,7 @@ export class ThinCMSClient {
     this.apiKey = profile.apiKey;
     this.siteId = profile.siteId;
     this.activeSiteName = profile.name;
+    this.siteContextChanged();
     return { name: profile.name, siteId: profile.siteId };
   }
 

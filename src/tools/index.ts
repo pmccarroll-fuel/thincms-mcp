@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ThinCMSClient } from "../client.js";
-import { recordToolName, runWithClient } from "../helpers.js";
+import { recordToolName, runWithClient, getCurrentOverride, formatText } from "../helpers.js";
+import { ToolGate, type Module } from "../tool-rights.js";
 import { registerCapabilitiesTool } from "./capabilities.js";
 import { registerSnapshotTools } from "./snapshots.js";
 import { registerPostTools } from "./posts.js";
@@ -46,7 +47,16 @@ import { registerVersionTools } from "./versions.js";
 import { registerReleaseTools } from "./releases.js";
 import { registerUploadTools } from "./uploads.js";
 
-export function registerAllTools(server: McpServer, client: ThinCMSClient) {
+// Module each tool file belongs to (P-3). null = always available.
+// Tools registered while `currentModule` is set are gated on that module.
+let currentModule: Module | null = null;
+function inModule(module: Module | null, register: () => void) {
+  currentModule = module;
+  try { register(); } finally { currentModule = null; }
+}
+
+export function registerAllTools(server: McpServer, client: ThinCMSClient): ToolGate {
+  const gate = new ToolGate();
   // Wrap server.tool to record every registered name into the central
   // tool registry. thincms_capabilities reads it back to surface the live
   // tool surface — lets agents detect when their MCP host has cached a
@@ -64,13 +74,25 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
   (server as any).tool = (name: string, ...rest: any[]) => {
     recordToolName(name);
     const handler = rest.pop();
-    const bound = typeof handler === "function"
-      ? (...args: any[]) => runWithClient(client, () => handler(...args))
+    // A per-call siteId can point at a site with fewer rights than the active
+    // one; check the target site's rights before running (the REST API checks again).
+    const guarded = typeof handler === "function"
+      ? (...args: any[]) => {
+          const target = getCurrentOverride()?.siteId ?? client.getActiveSite().siteId;
+          const verdict = gate.check(name, client.findSite(target)?.rights);
+          if (!verdict.ok) {
+            return formatText(`You don't have ${verdict.level} access to ${verdict.module} on this site, so ${name} isn't available here.`, true);
+          }
+          return handler(...args);
+        }
       : handler;
+    const bound = typeof guarded === "function"
+      ? (...args: any[]) => runWithClient(client, () => guarded(...args))
+      : guarded;
     const description = typeof rest[0] === "string" ? (rest.shift() as string) : undefined;
     const shape = rest.length ? rest.shift() : undefined;
     const annotations = rest.length ? rest.shift() : undefined;
-    return registerTool(
+    const registered = registerTool(
       name,
       {
         ...(description !== undefined && { description }),
@@ -79,49 +101,52 @@ export function registerAllTools(server: McpServer, client: ThinCMSClient) {
       },
       bound,
     );
+    gate.add(name, registered, currentModule);
+    return registered;
   };
 
-  registerPostTools(server, client);
-  registerPageTools(server, client);
-  registerCategoryTools(server, client);
-  registerAuthorTools(server, client);
-  registerTagTools(server, client);
-  registerMediaTools(server, client);
-  registerUploadTools(server, client);
-  registerTemplateTools(server, client);
-  registerNavigationTools(server, client);
-  registerSettingsTools(server, client);
-  registerScriptTools(server, client);
-  registerSecretTools(server, client);
-  registerFormTools(server, client);
-  registerSubmissionTools(server, client);
-  registerSearchTools(server, client);
-  registerPreviewTools(server, client);
-  registerSocialLinksTools(server, client);
-  registerContentBlockTools(server, client);
-  registerCollectionTools(server, client);
-  registerPopupTools(server, client);
-  registerShareButtonTools(server, client);
-  registerRedirectTools(server, client);
-  registerAnalyticsTools(server, client);
-  registerSiteTools(server, client);
-  registerSeoTools(server, client);
-  registerCourseTools(server, client);
-  registerLessonTools(server, client);
-  registerQuizTools(server, client);
-  registerWorkbookTools(server, client);
-  registerEnrollmentTools(server, client);
-  registerCohortTools(server, client);
-  registerSubscriberTools(server, client);
-  registerLeadMagnetTools(server, client);
-  registerIntegrationTools(server, client);
-  registerCampaignTools(server, client);
-  registerSequenceTools(server, client);
-  registerReviewTools(server, client);
-  registerChatTools(server, client);
-  registerToolTools(server, client);
-  registerVersionTools(server, client);
-  registerReleaseTools(server, client);
-  registerSnapshotTools(server, client);  // Snapshot/restore safety tools
-  registerCapabilitiesTool(server, client);  // Last — reads the populated registry
+  inModule("content", () => registerPostTools(server, client));
+  inModule("content", () => registerPageTools(server, client));
+  inModule("content", () => registerCategoryTools(server, client));
+  inModule("content", () => registerAuthorTools(server, client));
+  inModule("content", () => registerTagTools(server, client));
+  inModule("content", () => registerMediaTools(server, client));
+  inModule("content", () => registerUploadTools(server, client));
+  inModule("content", () => registerTemplateTools(server, client));
+  inModule("content", () => registerNavigationTools(server, client));
+  inModule("content", () => registerSettingsTools(server, client));
+  inModule("administration", () => registerScriptTools(server, client));
+  inModule("administration", () => registerSecretTools(server, client));
+  inModule("marketing", () => registerFormTools(server, client));
+  inModule("marketing", () => registerSubmissionTools(server, client));
+  inModule("content", () => registerSearchTools(server, client));
+  inModule("content", () => registerPreviewTools(server, client));
+  inModule("content", () => registerSocialLinksTools(server, client));
+  inModule("content", () => registerContentBlockTools(server, client));
+  inModule("content", () => registerCollectionTools(server, client));
+  inModule("marketing", () => registerPopupTools(server, client));
+  inModule("content", () => registerShareButtonTools(server, client));
+  inModule("content", () => registerRedirectTools(server, client));
+  inModule("analytics", () => registerAnalyticsTools(server, client));
+  inModule(null, () => registerSiteTools(server, client));
+  inModule("content", () => registerSeoTools(server, client));
+  inModule("courses", () => registerCourseTools(server, client));
+  inModule("courses", () => registerLessonTools(server, client));
+  inModule("courses", () => registerQuizTools(server, client));
+  inModule("courses", () => registerWorkbookTools(server, client));
+  inModule("courses", () => registerEnrollmentTools(server, client));
+  inModule("courses", () => registerCohortTools(server, client));
+  inModule("marketing", () => registerSubscriberTools(server, client));
+  inModule("marketing", () => registerLeadMagnetTools(server, client));
+  inModule("marketing", () => registerIntegrationTools(server, client));
+  inModule("marketing", () => registerCampaignTools(server, client));
+  inModule("marketing", () => registerSequenceTools(server, client));
+  inModule("reviews", () => registerReviewTools(server, client));
+  inModule("chat", () => registerChatTools(server, client));
+  inModule("tools", () => registerToolTools(server, client));
+  inModule("content", () => registerVersionTools(server, client));
+  inModule("content", () => registerReleaseTools(server, client));
+  inModule(null, () => registerSnapshotTools(server, client));  // Snapshot/restore safety tools
+  registerCapabilitiesTool(server, client, gate);  // Last — reads the populated registry
+  return gate;
 }
