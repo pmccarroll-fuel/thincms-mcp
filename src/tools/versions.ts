@@ -4,7 +4,7 @@ import type { ThinCMSClient } from "../client.js";
 import { formatResult, siteAwareTool } from "../helpers.js";
 
 const ENTITY_TYPE = z
-  .enum(["page", "post", "template", "navigation", "contentBlock", "collection"])
+  .enum(["page", "post", "template", "navigation", "contentBlock", "collection", "courseModule", "lesson", "quiz", "workbook"])
   .describe("Content type");
 
 export function registerVersionTools(server: McpServer, client: ThinCMSClient) {

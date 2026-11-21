@@ -42,6 +42,42 @@ export class ThinCMSClient {
 
   // Hosted mode: refresh credentials and the permitted site list on every
   // request, so token refreshes and admin permission changes apply mid-session.
+  // Called whenever the active site or the user's rights may have changed,
+  // so the session's tool list can be re-gated (tool-rights.ts).
+  private siteContextListener: (() => void) | null = null;
+  onSiteContextChange(fn: () => void): void {
+    this.siteContextListener = fn;
+  }
+  private siteContextChanged(): void {
+    this.siteContextListener?.();
+  }
+
+  /**
+   * Local API-key mode: ask ThinCMS for each key's module limits (P-4) so the
+   * tool list matches what the key can do. Sites whose server is too old to
+   * answer keep no rights, which lists every tool (the REST API still checks).
+   */
+  async loadApiKeyRights(): Promise<void> {
+    if (this.bearerToken) return;
+    let changed = false;
+    for (const site of this.sites) {
+      const key = site.apiKey ?? this.apiKey;
+      if (!key) continue;
+      const res = await this.request(this.url("/mcp/me"), {
+        method: "GET",
+        headers: { "X-API-Key": key, "X-Site-Id": site.siteId },
+      });
+      const rights = res.ok ? res.data?.sites?.[0]?.rights : undefined;
+      if (rights) { site.rights = rights; changed = true; }
+    }
+    if (changed) this.siteContextChanged();
+  }
+
+  /** Rights for the active site (hosted mode); undefined in local API-key mode. */
+  getActiveRights(): SiteProfile["rights"] {
+    return this.sites.find((s) => s.siteId === this.siteId)?.rights;
+  }
+
   updateHostedAuth(bearerToken: string, sites: SiteProfile[]): void {
     this.bearerToken = bearerToken;
     this.sites = sites;
@@ -49,6 +85,7 @@ export class ThinCMSClient {
       this.siteId = sites[0].siteId;
       this.activeSiteName = sites[0].name;
     }
+    this.siteContextChanged();
   }
 
   /** Resolve a site by ID or (case-insensitive) name. */
@@ -81,6 +118,7 @@ export class ThinCMSClient {
     this.apiKey = profile.apiKey;
     this.siteId = profile.siteId;
     this.activeSiteName = profile.name;
+    this.siteContextChanged();
     return { name: profile.name, siteId: profile.siteId };
   }
 
@@ -138,7 +176,7 @@ export class ThinCMSClient {
     const override = getCurrentOverride();
     // Staging into a release, and release bookkeeping, change nothing live.
     // Publishing / scheduling a release still needs confirmation.
-    if (override?.releaseId || (path && isNonLiveReleasePath(path))) return null;
+    if (override?.releaseId || (path && (isNonLiveReleasePath(path) || isNonLiveDocumentPath(path)))) return null;
     const targetSiteId = override?.siteId ?? this.siteId;
     if (!this.isProductionSite(targetSiteId)) return null;
     if (override?.confirmProductionWrite === true) return null;
@@ -147,6 +185,15 @@ export class ThinCMSClient {
     const reason = this.productionSiteIds.has(targetSiteId)
       ? "it is in THINCMS_PRODUCTION_SITE_IDS"
       : "the site is live";
+    if (path && /^\/documents\//.test(path)) {
+      return {
+        ok: false,
+        status: 403,
+        data: {
+          error: `This would email or cut off a real recipient on production site ${label} (${reason}). Make sure a person approved the preview (thincms_preview_document), then re-call with confirmProductionWrite: true.`,
+        },
+      };
+    }
     return {
       ok: false,
       status: 403,
@@ -543,6 +590,20 @@ export function isPrivateAddress(address: string): boolean {
 }
 
 /** Release endpoints that don't change the live site (everything except publish/schedule). */
+/**
+ * Document drafts, previews and types reach no one, so they don't need the
+ * production-write confirmation. Sending, resending and withdrawing do: they
+ * email or cut off a real recipient.
+ */
+export function isNonLiveDocumentPath(path: string): boolean {
+  const p = path.split('?')[0];
+  if (/^\/document-types(\/[^/]+)?$/.test(p)) return true;
+  if (/^\/documents$/.test(p)) return true;               // create draft
+  if (/^\/documents\/[^/]+$/.test(p)) return true;         // update draft
+  if (/^\/documents\/[^/]+\/preview$/.test(p)) return true;
+  return false;
+}
+
 export function isNonLiveReleasePath(path: string): boolean {
   return /^\/releases(\/|$|\?)/.test(path) && !/\/(publish|schedule)(\?|$)/.test(path);
 }

@@ -131,7 +131,9 @@ export function registerReviewTools(server: McpServer, client: ThinCMSClient) {
         googleLocationId: z.string().optional().describe("Google Business Profile place ID."),
         outscraperApiKey: z.string().optional().describe("Outscraper API key. Empty string clears."),
         autoPost5Star: z.boolean().optional().describe("Auto-publish 5-star reviews when sentiment matches."),
-        syncTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("Daily sync time HH:mm in site's timezone."),
+        syncTime: z.string().regex(/^\d{2}:\d{2}$/).optional().describe("Sync time HH:mm in site's timezone."),
+        syncFrequency: z.enum(["daily", "weekly"]).optional().describe("How often reviews sync automatically."),
+        syncWeekday: z.number().int().min(0).max(6).optional().describe("Weekly only: day to sync, 0=Sunday … 6=Saturday (site-local)."),
         backfillDays: z.number().int().min(1).max(365).optional().describe("How many days of history to fetch on first connect (1-365)."),
       }).optional(),
       ai: z.object({
@@ -140,7 +142,8 @@ export function registerReviewTools(server: McpServer, client: ThinCMSClient) {
         openaiApiKey: z.string().optional().describe("OpenAI key. Empty string clears."),
         anthropicApiKey: z.string().optional().describe("Anthropic key. Empty string clears."),
       }).optional(),
-      recipientUserIds: z.array(z.string()).optional().describe("Replace the list of users who receive the daily digest. Each ID must be an existing site user."),
+      recipientUserIds: z.array(z.string()).optional().describe("Replace the list of users who receive the daily digest. Each ID must be an existing site user (its `userId` in GET /api/v1/users)."),
+      recipientInvitationIds: z.array(z.string()).optional().describe("Replace the list of pending invitations (the `id` of an invitation in GET /api/v1/users, or `invitationId` from thincms_get_reviews_settings) whose email also receives the digest. Carried over to the user when they accept."),
     },
     async (params) => {
       const result = await client.put("/reviews/settings", params);

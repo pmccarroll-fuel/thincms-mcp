@@ -15,12 +15,14 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
     "List static pages with optional status filter and pagination.",
     {
       status: z.enum(["draft", "published"]).optional().describe("Filter by status"),
+      visibility: z.enum(["public", "chat-only"]).optional().describe("Filter by visibility (chat-only = chat assistant knowledge pages)"),
       page: z.number().int().positive().optional().describe("Page number (default: 1)"),
       limit: z.number().int().positive().optional().describe("Items per page (default: 50)"),
     },
     async (params) => {
       const queryParams: Record<string, string> = {};
       if (params.status) queryParams.status = params.status;
+      if (params.visibility) queryParams.visibility = params.visibility;
       if (params.page) queryParams.page = String(params.page);
       if (params.limit) queryParams.limit = String(params.limit);
       const result = await client.get("/pages", queryParams);
@@ -67,6 +69,7 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
       ogImageUrl: z.string().optional().describe("Open Graph image URL"),
       canonicalUrl: z.string().optional().describe("Canonical URL"),
       noIndex: z.boolean().optional().describe("Set true to add noindex meta tag"),
+      visibility: z.enum(["public", "chat-only"]).optional().describe("\"chat-only\" = unlisted knowledge page for the chat assistant: never served at a URL, never in the sitemap, navigation, llms.txt or site search. Must still be status \"published\" for the assistant to use it. Visitors can see anything in it by asking the assistant, so never put confidential information there."),
       jsonLd: z.string().optional().describe("Custom JSON-LD (Schema.org) injected verbatim into the page <head>. Pass valid JSON as a string. Use for Service, Event, BreadcrumbList, HowTo, Article, etc. Set to empty string to clear."),
     },
     async (params) => {
@@ -99,6 +102,7 @@ export function registerPageTools(server: McpServer, client: ThinCMSClient) {
       ogImageUrl: z.string().optional().describe("Open Graph image URL"),
       canonicalUrl: z.string().optional().describe("Canonical URL"),
       noIndex: z.boolean().optional().describe("Set true to add noindex meta tag"),
+      visibility: z.enum(["public", "chat-only"]).optional().describe("\"chat-only\" = unlisted knowledge page for the chat assistant: never served at a URL, never in the sitemap, navigation, llms.txt or site search. Must still be status \"published\" for the assistant to use it. Visitors can see anything in it by asking the assistant, so never put confidential information there."),
       jsonLd: z.string().optional().describe("Custom JSON-LD (Schema.org) injected verbatim into the page <head>. Pass valid JSON as a string. Use for Service, Event, BreadcrumbList, HowTo, Article, etc. Set to empty string to clear."),
     },
     async (params) => {

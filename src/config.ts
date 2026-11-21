@@ -9,6 +9,8 @@ export interface SiteProfile {
   domain?: string;
   // Hosted mode only: "live" sites are treated as production (write guard).
   siteStatus?: string;
+  // Hosted mode only: the user's module rights for MCP on this site (P-3).
+  rights?: import("./tool-rights.js").Rights;
 }
 
 export interface ThinCMSConfig {

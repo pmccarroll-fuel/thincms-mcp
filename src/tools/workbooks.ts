@@ -6,7 +6,12 @@ import type { ThinCMSClient } from "../client.js";
 import { formatResult, siteAwareTool, resolveContentInput, uploadIdField, LOCAL_ONLY, AS_DOWNLOAD_FIELD, downloadLinks } from "../helpers.js";
 
 const fieldsArraySchema = z.array(z.record(z.any())).describe(
-  "Ordered array of field definitions. Each field is an object with at minimum { fieldId, type, label }. v1 field types: short_text, long_text, number, rating, select, multi_select, date, prompt_display, markdown_display. Input fields may include `prefillFrom: { courseSlug, workbookSlug, fieldId }` for cross-workbook references.",
+  "Ordered array of field definitions, each at minimum { fieldId, type, label }. fieldId: lowercase letters, numbers, - or _. " +
+  "Input types: short_text, long_text (rows), number, rating, select, multi_select, date, table. Display types: prompt_display (label, helpText, content, collapsible), markdown_display (content only — a label is dropped). " +
+  "select / multi_select: options MUST be objects [{ value, label }] (plain strings are rejected with 422). " +
+  "rating: { scale: 2-10 (default 5), scaleLabels? }; min/max are not supported and are dropped. " +
+  "table (alias repeating_group): { columns: [{ columnId, label, type: short_text|long_text|number|select|date|rating, required?, options? (select: [{ value, label }]), scale? (rating), width?: narrow|normal|wide }], minRows?, maxRows? (≤100), initialRows?, addRowLabel? }; the answer is an array of row objects keyed by columnId. " +
+  "Any input field: required?, helpText?, placeholder?, private? (true = only the learner sees the answer; hidden from admin views, admin exports and CSVs, kept in the learner's own export), prefillFrom? { courseSlug, workbookSlug, fieldId } to carry an earlier answer forward (works for tables too: the rows are copied).",
 );
 
 async function resolveFields(
@@ -192,7 +197,7 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
     "Export a single learner's workbook response as PDF or Markdown. Locally, pass outputPath to write the file to disk (required for PDF; recommended for Markdown); without outputPath, Markdown is returned inline. On the hosted server outputPath is ignored: PDFs come back as an attached resource and Markdown inline.",
     {
       workbookId: z.string().describe("Workbook ID (required)"),
-      userId: z.string().describe("Learner user ID (required)"),
+      memberId: z.string().describe("Learner member ID (required) — `member.id` from thincms_list_enrollments or `memberId` from a workbook response"),
       format: z.enum(["pdf", "markdown"]).describe("Output format"),
       outputPath: z.string().optional().describe("Local file path to write the export to. Required for PDF."),
       asDownload: AS_DOWNLOAD_FIELD,
@@ -206,15 +211,15 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
         });
       }
       const raw = await client.getRaw(
-        `/workbooks/${params.workbookId}/responses/${params.userId}/export`,
+        `/workbooks/${params.workbookId}/responses/${params.memberId}/export`,
         { format: params.format },
       );
       if (!raw.ok) return formatResult(raw);
       if (params.asDownload) {
-        return downloadLinks(client, [{ filename: raw.filename || `workbook-${params.workbookId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
+        return downloadLinks(client, [{ filename: raw.filename || `workbook-${params.workbookId}-${params.memberId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
       }
       if (client.isRemote()) {
-        return deliverRemote(raw, `workbook-${params.workbookId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`);
+        return deliverRemote(raw, `workbook-${params.workbookId}-${params.memberId}.${params.format === "pdf" ? "pdf" : "md"}`);
       }
       if (params.outputPath) {
         const saved = await saveBytesTo(params.outputPath, raw.bytes);
@@ -236,7 +241,7 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
     "Export a learner's full course portfolio (every workbook in module order) as PDF or Markdown. Locally, pass outputPath for PDF (required) or to save the Markdown to disk. On the hosted server outputPath is ignored: PDFs come back as an attached resource and Markdown inline.",
     {
       courseId: z.string().describe("Course ID (required)"),
-      userId: z.string().describe("Learner user ID (required)"),
+      memberId: z.string().describe("Learner member ID (required) — `member.id` from thincms_list_enrollments or `memberId` from a workbook response"),
       format: z.enum(["pdf", "markdown"]).describe("Output format"),
       outputPath: z.string().optional().describe("Local file path to write the export to. Required for PDF."),
       asDownload: AS_DOWNLOAD_FIELD,
@@ -250,15 +255,15 @@ export function registerWorkbookTools(server: McpServer, client: ThinCMSClient) 
         });
       }
       const raw = await client.getRaw(
-        `/courses/${params.courseId}/portfolio/${params.userId}/export`,
+        `/courses/${params.courseId}/portfolio/${params.memberId}/export`,
         { format: params.format },
       );
       if (!raw.ok) return formatResult(raw);
       if (params.asDownload) {
-        return downloadLinks(client, [{ filename: raw.filename || `portfolio-${params.courseId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
+        return downloadLinks(client, [{ filename: raw.filename || `portfolio-${params.courseId}-${params.memberId}.${params.format === "pdf" ? "pdf" : "md"}`, contentType: raw.contentType || "application/octet-stream", content: raw.bytes }]);
       }
       if (client.isRemote()) {
-        return deliverRemote(raw, `portfolio-${params.courseId}-${params.userId}.${params.format === "pdf" ? "pdf" : "md"}`);
+        return deliverRemote(raw, `portfolio-${params.courseId}-${params.memberId}.${params.format === "pdf" ? "pdf" : "md"}`);
       }
       if (params.outputPath) {
         const saved = await saveBytesTo(params.outputPath, raw.bytes);

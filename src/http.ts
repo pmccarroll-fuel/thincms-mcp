@@ -12,6 +12,7 @@
 //   THINCMS_PRODUCTION_SITE_IDS  Optional production write guard, as in stdio mode
 
 import express, { type Request, type Response } from "express";
+import type { Rights } from "./tool-rights.js";
 import { createHash, randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
@@ -49,7 +50,7 @@ interface MeResponse {
   user: { id: string; email: string; name: string | null };
   clientId: string;
   tokenExpiresAt: number;
-  sites: Array<{ siteId: string; name: string; domain: string; role: string; siteStatus?: string }>;
+  sites: Array<{ siteId: string; name: string; domain: string; role: string; siteStatus?: string; rights?: Rights }>;
 }
 
 const tokenCache = new Map<string, { me: MeResponse; until: number }>();
@@ -92,7 +93,7 @@ const verifier = {
 };
 
 function sitesFrom(me: MeResponse): SiteProfile[] {
-  return me.sites.map((s) => ({ name: s.name, siteId: s.siteId, domain: s.domain, role: s.role, siteStatus: s.siteStatus }));
+  return me.sites.map((s) => ({ name: s.name, siteId: s.siteId, domain: s.domain, role: s.role, siteStatus: s.siteStatus, rights: s.rights }));
 }
 
 // ── Sessions ──

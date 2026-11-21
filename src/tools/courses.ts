@@ -24,7 +24,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_get_course",
-    "Get a single course by ID, including its modules, lessons, and quizzes.",
+    "Get a single course by ID, including its sections, modules (with sectionId), lessons, quizzes and workbooks.",
     {
       id: z.string().describe("Course ID"),
     },
@@ -50,6 +50,8 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
       dripMode: z.enum(["all-at-once", "scheduled", "manual", "sequential"]).optional().describe("Content drip mode (default: all-at-once). Ignored for communities."),
       priceAmountCents: z.number().int().optional().describe("Price in cents (for purchase mode)"),
       priceCurrency: z.string().optional().describe("Currency code (default: USD)"),
+      autoNumbering: z.boolean().optional().describe("Automatic numbering in outlines: \"Module N:\", item numbers and \"Session N:\" (default true). Set false when titles carry their own labels, e.g. \"Belt 3 · Module 1: …\"."),
+      discussionNotifyEmails: z.string().nullable().optional().describe("Comma-separated instructor emails notified when a learner starts a discussion or replies. Empty/null = the site contact email. Learners are emailed about replies in their threads automatically (they can opt out)."),
     },
     async (params) => {
       const result = await client.post("/courses", params);
@@ -74,6 +76,8 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
       dripMode: z.enum(["all-at-once", "scheduled", "manual", "sequential"]).optional().describe("Content drip mode"),
       priceAmountCents: z.number().int().optional().describe("Price in cents"),
       priceCurrency: z.string().optional().describe("Currency code"),
+      autoNumbering: z.boolean().optional().describe("Automatic numbering in outlines: \"Module N:\", item numbers and \"Session N:\" (default true). Set false when titles carry their own labels, e.g. \"Belt 3 · Module 1: …\"."),
+      discussionNotifyEmails: z.string().nullable().optional().describe("Comma-separated instructor emails notified when a learner starts a discussion or replies. Empty/null = the site contact email. Learners are emailed about replies in their threads automatically (they can opt out)."),
     },
     async (params) => {
       const { id, ...body } = params;
@@ -96,11 +100,13 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_create_module",
-    "Create a new module within a course. Modules are auto-ordered by creation sequence.",
+    "Create a new module within a course. New modules go last in the course (and so last in their section, if sectionId is given).",
     {
       courseId: z.string().describe("Course ID (required)"),
       title: z.string().describe("Module title (required)"),
       description: z.string().optional().describe("Module description"),
+      sectionId: z.string().nullable().optional().describe("Put the module in this section (from thincms_create_section); null removes it from its section"),
+      requiredForCompletion: z.boolean().optional().describe("false = none of this module's items count toward completion (e.g. a Bonus material module). Default true."),
     },
     async (params) => {
       const { courseId, ...body } = params;
@@ -111,12 +117,14 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_update_module",
-    "Update a module's title or description.",
+    "Update a module: title, description, section, or whether its items count toward completion.",
     {
       courseId: z.string().describe("Course ID (required)"),
       moduleId: z.string().describe("Module ID (required)"),
       title: z.string().optional().describe("Module title"),
       description: z.string().optional().describe("Module description"),
+      sectionId: z.string().nullable().optional().describe("Put the module in this section (from thincms_create_section); null removes it from its section"),
+      requiredForCompletion: z.boolean().optional().describe("false = none of this module's items count toward completion (e.g. a Bonus material module). Default true."),
     },
     async (params) => {
       const { courseId, moduleId, ...body } = params;
@@ -140,7 +148,7 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
 
   siteAwareTool(server, client, 
     "thincms_reorder_modules",
-    "Reorder modules within a course. Pass all module IDs in the desired order.",
+    "Reorder modules within a course. Pass all module IDs in the desired order: this is the course order. Each section's modules stay together where its first module is; move whole sections with thincms_reorder_sections.",
     {
       courseId: z.string().describe("Course ID (required)"),
       moduleIds: z.array(z.string()).describe("Array of module IDs in desired order"),
@@ -167,6 +175,79 @@ export function registerCourseTools(server: McpServer, client: ThinCMSClient) {
       const result = await client.put(`/modules/${params.moduleId}/reorder`, {
         items: params.items,
       });
+      return formatResult(result);
+    }
+  );
+
+  // ── Sections (groups of modules, e.g. one belt of a program) ──
+
+  siteAwareTool(server, client,
+    "thincms_create_section",
+    "Create a course section: a group of modules shown to learners as a collapsible outline (one open at a time, opening on the section of the item they last viewed), with progress per section. Put modules in it with thincms_update_module (sectionId); grouping keeps the course order, and the section sits where its first module is. Release rules can target a section (itemType \"section\" in thincms_set_cohort_release_schedule). Sections are written live (not staged in releases).",
+    {
+      courseId: z.string().describe("Course ID (required)"),
+      title: z.string().describe("Section title, e.g. \"Session 1 · Belt 1\" (required)"),
+      description: z.string().optional().describe("Short text shown when the section is open"),
+      sortOrder: z.number().int().optional().describe("Position (default: last)"),
+    },
+    async (params) => {
+      const { courseId, ...body } = params;
+      const result = await client.post(`/courses/${courseId}/sections`, body);
+      return formatResult(result);
+    }
+  );
+
+  siteAwareTool(server, client,
+    "thincms_list_sections",
+    "List a course's sections in order, each with its module IDs and titles.",
+    {
+      courseId: z.string().describe("Course ID (required)"),
+    },
+    async (params) => {
+      const result = await client.get(`/courses/${params.courseId}/sections`);
+      return formatResult(result);
+    }
+  );
+
+  siteAwareTool(server, client,
+    "thincms_update_section",
+    "Rename a section or change its description or position.",
+    {
+      courseId: z.string().describe("Course ID (required)"),
+      sectionId: z.string().describe("Section ID (required)"),
+      title: z.string().optional().describe("Section title"),
+      description: z.string().nullable().optional().describe("Section description (null clears it)"),
+      sortOrder: z.number().int().optional().describe("Position"),
+    },
+    async (params) => {
+      const { courseId, sectionId, ...body } = params;
+      const result = await client.put(`/courses/${courseId}/sections/${sectionId}`, body);
+      return formatResult(result);
+    }
+  );
+
+  siteAwareTool(server, client,
+    "thincms_delete_section",
+    "Delete a section. Its modules are kept, without a section; release rules and overrides on the section are removed.",
+    {
+      courseId: z.string().describe("Course ID (required)"),
+      sectionId: z.string().describe("Section ID (required)"),
+    },
+    async (params) => {
+      const result = await client.delete(`/courses/${params.courseId}/sections/${params.sectionId}`);
+      return formatResult(result);
+    }
+  );
+
+  siteAwareTool(server, client,
+    "thincms_reorder_sections",
+    "Reorder a course's sections. Pass all section IDs in the desired order; modules move with their section.",
+    {
+      courseId: z.string().describe("Course ID (required)"),
+      sectionIds: z.array(z.string()).describe("Section IDs in the desired order"),
+    },
+    async (params) => {
+      const result = await client.put(`/courses/${params.courseId}/sections/reorder`, { sectionIds: params.sectionIds });
       return formatResult(result);
     }
   );
