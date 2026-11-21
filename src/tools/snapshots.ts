@@ -56,6 +56,7 @@ export function registerSnapshotTools(server: McpServer, client: ThinCMSClient) 
           const {
             // Read-only / computed (stripped to avoid stale values):
             previewSlug: _ps, previewUrl: _pu, siteStatus: _ss, liveAt: _la,
+            redirectDomains: _rd, // managed in the admin panel, not via settings PUT
             // Admin-only writable (stripped because editor-role PUT 403s on these):
             name: _n, domain: _d,
             apiEnabled: _ae, smtp: _smtp, stripe: _stripe, previewDomain: _pd,
